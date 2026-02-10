@@ -1,0 +1,164 @@
+package socket
+
+import (
+	"bufio"
+	"encoding/json"
+	"log"
+	"net"
+	"os"
+	"time"
+
+	"github.com/taigrr/blastd/internal/db"
+)
+
+type Request struct {
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
+}
+
+type Response struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+type ActivityData struct {
+	Project          string  `json:"project"`
+	GitRemote        string  `json:"git_remote"`
+	StartedAt        string  `json:"started_at"`
+	EndedAt          string  `json:"ended_at"`
+	Filetype         string  `json:"filetype"`
+	LinesAdded       int     `json:"lines_added"`
+	LinesRemoved     int     `json:"lines_removed"`
+	GitCommit        string  `json:"git_commit"`
+	ActionsPerMinute float64 `json:"actions_per_minute"`
+	WordsPerMinute   float64 `json:"words_per_minute"`
+}
+
+type Server struct {
+	path     string
+	db       *db.DB
+	machine  string
+	listener net.Listener
+	done     chan struct{}
+}
+
+func NewServer(path string, database *db.DB, machine string) *Server {
+	return &Server{
+		path:    path,
+		db:      database,
+		machine: machine,
+		done:    make(chan struct{}),
+	}
+}
+
+func (s *Server) Start() error {
+	// Remove existing socket file
+	os.Remove(s.path)
+
+	listener, err := net.Listen("unix", s.path)
+	if err != nil {
+		return err
+	}
+	s.listener = listener
+
+	// Set socket permissions
+	os.Chmod(s.path, 0600)
+
+	go s.accept()
+	return nil
+}
+
+func (s *Server) Stop() {
+	close(s.done)
+	if s.listener != nil {
+		s.listener.Close()
+	}
+	os.Remove(s.path)
+}
+
+func (s *Server) accept() {
+	for {
+		select {
+		case <-s.done:
+			return
+		default:
+			conn, err := s.listener.Accept()
+			if err != nil {
+				select {
+				case <-s.done:
+					return
+				default:
+					log.Printf("accept error: %v", err)
+					continue
+				}
+			}
+			go s.handle(conn)
+		}
+	}
+}
+
+func (s *Server) handle(conn net.Conn) {
+	defer conn.Close()
+
+	scanner := bufio.NewScanner(conn)
+	encoder := json.NewEncoder(conn)
+
+	for scanner.Scan() {
+		var req Request
+		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+			encoder.Encode(Response{OK: false, Error: "invalid json"})
+			continue
+		}
+
+		switch req.Type {
+		case "activity":
+			s.handleActivity(req.Data, encoder)
+		case "ping":
+			encoder.Encode(Response{OK: true})
+		default:
+			encoder.Encode(Response{OK: false, Error: "unknown request type"})
+		}
+	}
+}
+
+func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {
+	var ad ActivityData
+	if err := json.Unmarshal(data, &ad); err != nil {
+		encoder.Encode(Response{OK: false, Error: "invalid activity data"})
+		return
+	}
+
+	startedAt, err := time.Parse(time.RFC3339, ad.StartedAt)
+	if err != nil {
+		encoder.Encode(Response{OK: false, Error: "invalid started_at"})
+		return
+	}
+
+	endedAt, err := time.Parse(time.RFC3339, ad.EndedAt)
+	if err != nil {
+		encoder.Encode(Response{OK: false, Error: "invalid ended_at"})
+		return
+	}
+
+	activity := &db.Activity{
+		Project:          ad.Project,
+		GitRemote:        ad.GitRemote,
+		StartedAt:        startedAt,
+		EndedAt:          endedAt,
+		Filetype:         ad.Filetype,
+		LinesAdded:       ad.LinesAdded,
+		LinesRemoved:     ad.LinesRemoved,
+		GitCommit:        ad.GitCommit,
+		ActionsPerMinute: ad.ActionsPerMinute,
+		WordsPerMinute:   ad.WordsPerMinute,
+		Editor:           "neovim",
+		Machine:          s.machine,
+	}
+
+	if err := s.db.InsertActivity(activity); err != nil {
+		encoder.Encode(Response{OK: false, Error: err.Error()})
+		return
+	}
+
+	encoder.Encode(Response{OK: true})
+}
