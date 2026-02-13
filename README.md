@@ -1,6 +1,6 @@
 # blastd
 
-Local daemon for [Blast](https://github.com/taigrr/blast) activity tracking. Caches activity data in SQLite and syncs to the Blast server every 10 minutes (with exponential backoff on failures).
+Local daemon for [Blast](https://nvimblast.com) activity tracking. Caches activity data in SQLite and syncs to the Blast server every 10 minutes (with exponential backoff on failures).
 
 ## Installation
 
@@ -66,7 +66,7 @@ The daemon listens on a Unix socket at `~/.local/share/blastd/blastd.sock`.
   "type": "activity",
   "data": {
     "project": "blast",
-    "git_remote": "git@github.com:taigrr/blast.git",
+    "git_remote": "git@github.com:taigrr/blastd.git",
     "started_at": "2024-01-01T00:00:00Z",
     "ended_at": "2024-01-01T00:05:00Z",
     "filetype": "go",
