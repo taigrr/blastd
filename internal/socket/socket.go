@@ -32,6 +32,7 @@ type ActivityData struct {
 	GitCommit        string  `json:"git_commit"`
 	ActionsPerMinute float64 `json:"actions_per_minute"`
 	WordsPerMinute   float64 `json:"words_per_minute"`
+	Editor           string  `json:"editor"`
 }
 
 type Server struct {
@@ -140,6 +141,11 @@ func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {
 		return
 	}
 
+	editor := ad.Editor
+	if editor == "" {
+		editor = "neovim"
+	}
+
 	activity := &db.Activity{
 		Project:          ad.Project,
 		GitRemote:        ad.GitRemote,
@@ -151,7 +157,7 @@ func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {
 		GitCommit:        ad.GitCommit,
 		ActionsPerMinute: ad.ActionsPerMinute,
 		WordsPerMinute:   ad.WordsPerMinute,
-		Editor:           "neovim",
+		Editor:           editor,
 		Machine:          s.machine,
 	}
 

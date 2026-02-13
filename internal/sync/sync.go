@@ -12,11 +12,15 @@ import (
 )
 
 type Syncer struct {
-	db        *db.DB
-	serverURL string
-	apiToken  string
-	interval  time.Duration
-	done      chan struct{}
+	db         *db.DB
+	serverURL  string
+	apiToken   string
+	interval   time.Duration
+	batchSize  int
+	backoff    time.Duration
+	minBackoff time.Duration
+	maxBackoff time.Duration
+	done       chan struct{}
 }
 
 type activityPayload struct {
@@ -46,19 +50,21 @@ type syncResponse struct {
 	} `json:"activities"`
 }
 
-func NewSyncer(database *db.DB, serverURL, apiToken string, intervalMinutes int) *Syncer {
+func NewSyncer(database *db.DB, serverURL, apiToken string, intervalMinutes, batchSize int) *Syncer {
 	return &Syncer{
-		db:        database,
-		serverURL: serverURL,
-		apiToken:  apiToken,
-		interval:  time.Duration(intervalMinutes) * time.Minute,
-		done:      make(chan struct{}),
+		db:         database,
+		serverURL:  serverURL,
+		apiToken:   apiToken,
+		interval:   time.Duration(intervalMinutes) * time.Minute,
+		batchSize:  batchSize,
+		minBackoff: 30 * time.Second,
+		maxBackoff: 30 * time.Minute,
+		done:       make(chan struct{}),
 	}
 }
 
 func (s *Syncer) Start() {
-	// Sync immediately on start
-	s.syncOnce()
+	s.drainBacklog()
 
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
@@ -66,11 +72,10 @@ func (s *Syncer) Start() {
 	for {
 		select {
 		case <-s.done:
-			// Final sync before shutdown
-			s.syncOnce()
+			s.drainBacklog()
 			return
 		case <-ticker.C:
-			s.syncOnce()
+			s.drainBacklog()
 		}
 	}
 }
@@ -79,25 +84,52 @@ func (s *Syncer) Stop() {
 	close(s.done)
 }
 
-func (s *Syncer) syncOnce() {
+func (s *Syncer) drainBacklog() {
 	if s.apiToken == "" {
 		log.Println("sync: no API token configured, skipping")
 		return
 	}
 
-	activities, err := s.db.GetUnsyncedActivities(100)
+	for {
+		select {
+		case <-s.done:
+			return
+		default:
+		}
+
+		n, err := s.syncBatch()
+		if err != nil {
+			s.increaseBackoff()
+			log.Printf("sync: error (retrying in %s): %v", s.backoff, err)
+
+			select {
+			case <-s.done:
+				return
+			case <-time.After(s.backoff):
+				continue
+			}
+		}
+
+		s.resetBackoff()
+
+		if n < s.batchSize {
+			return
+		}
+	}
+}
+
+func (s *Syncer) syncBatch() (int, error) {
+	activities, err := s.db.GetUnsyncedActivities(s.batchSize)
 	if err != nil {
-		log.Printf("sync: failed to get unsynced activities: %v", err)
-		return
+		return 0, fmt.Errorf("get unsynced activities: %w", err)
 	}
 
 	if len(activities) == 0 {
-		return
+		return 0, nil
 	}
 
 	log.Printf("sync: syncing %d activities", len(activities))
 
-	// Convert to payload
 	payloads := make([]activityPayload, len(activities))
 	for i, a := range activities {
 		payloads[i] = activityPayload{
@@ -118,14 +150,12 @@ func (s *Syncer) syncOnce() {
 
 	body, err := json.Marshal(syncRequest{Activities: payloads})
 	if err != nil {
-		log.Printf("sync: failed to marshal request: %v", err)
-		return
+		return 0, fmt.Errorf("marshal request: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", s.serverURL+"/api/activities", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("sync: failed to create request: %v", err)
-		return
+		return 0, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -133,45 +163,55 @@ func (s *Syncer) syncOnce() {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("sync: request failed: %v", err)
-		return
+		return 0, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("sync: server returned status %d", resp.StatusCode)
-		return
+		return 0, fmt.Errorf("server returned status %d", resp.StatusCode)
 	}
 
 	var syncResp syncResponse
 	if err := json.NewDecoder(resp.Body).Decode(&syncResp); err != nil {
-		log.Printf("sync: failed to decode response: %v", err)
-		return
+		return 0, fmt.Errorf("decode response: %w", err)
 	}
 
 	if !syncResp.Success {
-		log.Printf("sync: server returned success=false")
-		return
+		return 0, fmt.Errorf("server returned success=false")
 	}
 
-	// Mark activities as synced
 	ids := make([]int64, len(activities))
 	for i, a := range activities {
 		ids[i] = a.ID
 	}
 
 	if err := s.db.MarkSynced(ids); err != nil {
-		log.Printf("sync: failed to mark as synced: %v", err)
-		return
+		return 0, fmt.Errorf("mark as synced: %w", err)
 	}
 
 	log.Printf("sync: successfully synced %d activities", len(activities))
+	return len(activities), nil
+}
+
+func (s *Syncer) increaseBackoff() {
+	if s.backoff == 0 {
+		s.backoff = s.minBackoff
+	} else {
+		s.backoff *= 2
+		if s.backoff > s.maxBackoff {
+			s.backoff = s.maxBackoff
+		}
+	}
+}
+
+func (s *Syncer) resetBackoff() {
+	s.backoff = 0
 }
 
 func (s *Syncer) SyncNow() error {
 	if s.apiToken == "" {
 		return fmt.Errorf("no API token configured")
 	}
-	s.syncOnce()
+	s.drainBacklog()
 	return nil
 }

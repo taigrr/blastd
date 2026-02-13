@@ -1,6 +1,6 @@
 # blastd
 
-Local daemon for [Blast](https://github.com/taigrr/blast) activity tracking. Caches activity data in SQLite and syncs to the Blast server every 15 minutes.
+Local daemon for [Blast](https://github.com/taigrr/blast) activity tracking. Caches activity data in SQLite and syncs to the Blast server every 10 minutes (with exponential backoff on failures).
 
 ## Installation
 
@@ -19,8 +19,8 @@ server_url = "https://blast.taigrr.com"
 # API token from blast.taigrr.com/settings
 api_token = "blast_xxxxx"
 
-# Sync interval in minutes (default: 15)
-sync_interval_minutes = 15
+# Sync interval in minutes (default: 10)
+sync_interval_minutes = 10
 
 # Machine identifier (default: hostname)
 machine = "macbook-pro"

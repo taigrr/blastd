@@ -14,6 +14,7 @@ type Config struct {
 
 	// Sync settings
 	SyncIntervalMinutes int `toml:"sync_interval_minutes"`
+	SyncBatchSize       int `toml:"sync_batch_size"`
 
 	// Socket path
 	SocketPath string `toml:"socket_path"`
@@ -33,7 +34,8 @@ func DefaultConfig() *Config {
 
 	return &Config{
 		ServerURL:           "https://blast.taigrr.com",
-		SyncIntervalMinutes: 15,
+		SyncIntervalMinutes: 10,
+		SyncBatchSize:       100,
 		SocketPath:          filepath.Join(dataDir, "blastd.sock"),
 		DBPath:              filepath.Join(dataDir, "blast.db"),
 		Machine:             hostname,
@@ -44,15 +46,15 @@ func Load() (*Config, error) {
 	cfg := DefaultConfig()
 
 	// Try to load from config file
-	configPaths := []string{
-		filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "blastd", "config.toml"),
-		filepath.Join(os.Getenv("HOME"), ".config", "blastd", "config.toml"),
+	var configPaths []string
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		configPaths = append(configPaths, filepath.Join(xdg, "blastd", "config.toml"))
+	}
+	if home := os.Getenv("HOME"); home != "" {
+		configPaths = append(configPaths, filepath.Join(home, ".config", "blastd", "config.toml"))
 	}
 
 	for _, path := range configPaths {
-		if path == "" {
-			continue
-		}
 		if _, err := os.Stat(path); err == nil {
 			if _, err := toml.DecodeFile(path, cfg); err != nil {
 				return nil, err

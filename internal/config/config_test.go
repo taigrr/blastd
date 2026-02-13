@@ -1,0 +1,103 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestDefaultConfig(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if cfg.ServerURL != "https://blast.taigrr.com" {
+		t.Errorf("ServerURL = %q, want %q", cfg.ServerURL, "https://blast.taigrr.com")
+	}
+	if cfg.SyncIntervalMinutes != 10 {
+		t.Errorf("SyncIntervalMinutes = %d, want 10", cfg.SyncIntervalMinutes)
+	}
+	if cfg.SyncBatchSize != 100 {
+		t.Errorf("SyncBatchSize = %d, want 100", cfg.SyncBatchSize)
+	}
+	if cfg.Machine == "" {
+		t.Error("Machine should default to hostname, got empty string")
+	}
+	if cfg.SocketPath == "" {
+		t.Error("SocketPath should not be empty")
+	}
+	if cfg.DBPath == "" {
+		t.Error("DBPath should not be empty")
+	}
+}
+
+func TestLoadFromFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, "blastd")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	configContent := `
+server_url = "https://custom.example.com"
+api_token = "blast_test123"
+sync_interval_minutes = 5
+sync_batch_size = 50
+machine = "test-machine"
+`
+	configPath := filepath.Join(configDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	dataDir := filepath.Join(tmpDir, "data")
+	t.Setenv("HOME", tmpDir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.ServerURL != "https://custom.example.com" {
+		t.Errorf("ServerURL = %q, want %q", cfg.ServerURL, "https://custom.example.com")
+	}
+	if cfg.APIToken != "blast_test123" {
+		t.Errorf("APIToken = %q, want %q", cfg.APIToken, "blast_test123")
+	}
+	if cfg.SyncIntervalMinutes != 5 {
+		t.Errorf("SyncIntervalMinutes = %d, want 5", cfg.SyncIntervalMinutes)
+	}
+	if cfg.SyncBatchSize != 50 {
+		t.Errorf("SyncBatchSize = %d, want 50", cfg.SyncBatchSize)
+	}
+	if cfg.Machine != "test-machine" {
+		t.Errorf("Machine = %q, want %q", cfg.Machine, "test-machine")
+	}
+
+	_ = dataDir
+}
+
+func TestLoadNoXDGConfigHome(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.ServerURL != "https://blast.taigrr.com" {
+		t.Errorf("ServerURL = %q, want default", cfg.ServerURL)
+	}
+}
+
+func TestLoadNoHOME(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "")
+
+	_, err := Load()
+	if err != nil {
+		t.Fatalf("Load() should not error with missing HOME, got: %v", err)
+	}
+}
