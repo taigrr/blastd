@@ -14,9 +14,9 @@ Create `~/.config/blastd/config.toml`:
 
 ```toml
 # Blast server URL
-server_url = "https://blast.taigrr.com"
+server_url = "https://nvimblast.com"
 
-# API token from blast.taigrr.com/settings
+# API token from nvimblast.com/dashboard
 api_token = "blast_xxxxx"
 
 # Sync interval in minutes (default: 10)
@@ -62,23 +62,26 @@ The daemon listens on a Unix socket at `~/.local/share/blastd/blastd.sock`.
 ### Activity tracking
 
 ```json
-{"type": "activity", "data": {
-  "project": "blast",
-  "git_remote": "git@github.com:taigrr/blast.git",
-  "started_at": "2024-01-01T00:00:00Z",
-  "ended_at": "2024-01-01T00:05:00Z",
-  "filetype": "go",
-  "lines_added": 10,
-  "lines_removed": 5,
-  "actions_per_minute": 45.5,
-  "words_per_minute": 60.2
-}}
+{
+  "type": "activity",
+  "data": {
+    "project": "blast",
+    "git_remote": "git@github.com:taigrr/blast.git",
+    "started_at": "2024-01-01T00:00:00Z",
+    "ended_at": "2024-01-01T00:05:00Z",
+    "filetype": "go",
+    "lines_added": 10,
+    "lines_removed": 5,
+    "actions_per_minute": 45.5,
+    "words_per_minute": 60.2
+  }
+}
 ```
 
 ### Ping
 
 ```json
-{"type": "ping"}
+{ "type": "ping" }
 ```
 
 ## Related Projects

@@ -9,8 +9,8 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.ServerURL != "https://blast.taigrr.com" {
-		t.Errorf("ServerURL = %q, want %q", cfg.ServerURL, "https://blast.taigrr.com")
+	if cfg.ServerURL != "https://nvimblast.com" {
+		t.Errorf("ServerURL = %q, want %q", cfg.ServerURL, "https://nvimblast.com")
 	}
 	if cfg.SyncIntervalMinutes != 10 {
 		t.Errorf("SyncIntervalMinutes = %d, want 10", cfg.SyncIntervalMinutes)
@@ -32,7 +32,7 @@ func TestDefaultConfig(t *testing.T) {
 func TestLoadFromFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, "blastd")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -44,7 +44,7 @@ sync_batch_size = 50
 machine = "test-machine"
 `
 	configPath := filepath.Join(configDir, "config.toml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -87,7 +87,7 @@ func TestLoadNoXDGConfigHome(t *testing.T) {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.ServerURL != "https://blast.taigrr.com" {
+	if cfg.ServerURL != "https://nvimblast.com" {
 		t.Errorf("ServerURL = %q, want default", cfg.ServerURL)
 	}
 }

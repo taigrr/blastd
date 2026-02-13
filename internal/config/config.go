@@ -33,7 +33,7 @@ func DefaultConfig() *Config {
 	hostname, _ := os.Hostname()
 
 	return &Config{
-		ServerURL:           "https://blast.taigrr.com",
+		ServerURL:           "https://nvimblast.com",
 		SyncIntervalMinutes: 10,
 		SyncBatchSize:       100,
 		SocketPath:          filepath.Join(dataDir, "blastd.sock"),
@@ -65,7 +65,7 @@ func Load() (*Config, error) {
 
 	// Ensure data directory exists
 	dataDir := filepath.Dir(cfg.DBPath)
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, err
 	}
 

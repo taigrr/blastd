@@ -66,15 +66,15 @@ socket.Server  ──► db.DB (SQLite)  ◄── sync.Syncer
 
 The Neovim plugin (`blast.nvim/lua/blast/tracker.lua`) sends activity data over the socket with these fields:
 
-| Field | Type | Notes |
-|---|---|---|
-| `project` | string | From git dir name or `.blast.toml` |
-| `git_remote` | string | `origin` remote URL |
-| `started_at` | string | RFC 3339 UTC |
-| `ended_at` | string | RFC 3339 UTC |
-| `filetype` | string | Vim filetype |
-| `actions_per_minute` | float | Vim commands/min |
-| `words_per_minute` | float | Typing speed |
+| Field                | Type   | Notes                              |
+| -------------------- | ------ | ---------------------------------- |
+| `project`            | string | From git dir name or `.blast.toml` |
+| `git_remote`         | string | `origin` remote URL                |
+| `started_at`         | string | RFC 3339 UTC                       |
+| `ended_at`           | string | RFC 3339 UTC                       |
+| `filetype`           | string | Vim filetype                       |
+| `actions_per_minute` | float  | Vim commands/min                   |
+| `words_per_minute`   | float  | Typing speed                       |
 
 The plugin does **not** send: `lines_added`, `lines_removed`, `git_commit`, or `editor`. These are optional in the socket protocol. The `editor` field defaults to `"neovim"` if omitted.
 
@@ -93,10 +93,10 @@ The sync payload in `sync.go` uses matching camelCase JSON tags — these must s
 
 ## Key Dependencies
 
-| Dependency | Purpose |
-|---|---|
-| `github.com/BurntSushi/toml` | TOML config file parsing |
-| `modernc.org/sqlite` | Pure-Go SQLite driver (no CGO required) |
+| Dependency                   | Purpose                                 |
+| ---------------------------- | --------------------------------------- |
+| `github.com/BurntSushi/toml` | TOML config file parsing                |
+| `modernc.org/sqlite`         | Pure-Go SQLite driver (no CGO required) |
 
 No HTTP framework — uses `net/http` stdlib. No logging framework — uses `log` stdlib.
 
@@ -104,15 +104,15 @@ No HTTP framework — uses `net/http` stdlib. No logging framework — uses `log
 
 Config file: `$XDG_CONFIG_HOME/blastd/config.toml` or `~/.config/blastd/config.toml`
 
-| Field | Default | Notes |
-|---|---|---|
-| `server_url` | `https://blast.taigrr.com` | Blast server base URL |
-| `api_token` | _(empty)_ | Required for sync; without it, sync is skipped with a log warning |
-| `sync_interval_minutes` | `10` | How often to push activities |
-| `sync_batch_size` | `100` | Max activities per HTTP request (backlog is fully drained each cycle) |
-| `socket_path` | `~/.local/share/blastd/blastd.sock` | Unix socket location |
-| `db_path` | `~/.local/share/blastd/blast.db` | SQLite database location |
-| `machine` | OS hostname | Machine identifier sent with each activity |
+| Field                   | Default                             | Notes                                                                 |
+| ----------------------- | ----------------------------------- | --------------------------------------------------------------------- |
+| `server_url`            | `https://nvimblast.com`             | Blast server base URL                                                 |
+| `api_token`             | _(empty)_                           | Required for sync; without it, sync is skipped with a log warning     |
+| `sync_interval_minutes` | `10`                                | How often to push activities                                          |
+| `sync_batch_size`       | `100`                               | Max activities per HTTP request (backlog is fully drained each cycle) |
+| `socket_path`           | `~/.local/share/blastd/blastd.sock` | Unix socket location                                                  |
+| `db_path`               | `~/.local/share/blastd/blast.db`    | SQLite database location                                              |
+| `machine`               | OS hostname                         | Machine identifier sent with each activity                            |
 
 ## Code Patterns & Conventions
 
