@@ -33,7 +33,7 @@ type ActivityData struct {
 	Filetype         string  `json:"filetype"`
 	LinesAdded       int     `json:"lines_added"`
 	LinesRemoved     int     `json:"lines_removed"`
-	GitCommit        string  `json:"git_commit"`
+	GitBranch        string  `json:"git_branch"`
 	ActionsPerMinute float64 `json:"actions_per_minute"`
 	WordsPerMinute   float64 `json:"words_per_minute"`
 	Editor           string  `json:"editor"`
@@ -224,7 +224,7 @@ func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {
 		Filetype:         ad.Filetype,
 		LinesAdded:       ad.LinesAdded,
 		LinesRemoved:     ad.LinesRemoved,
-		GitCommit:        ad.GitCommit,
+		GitBranch:        ad.GitBranch,
 		ActionsPerMinute: ad.ActionsPerMinute,
 		WordsPerMinute:   ad.WordsPerMinute,
 		Editor:           editor,

@@ -21,7 +21,7 @@ type Activity struct {
 	Filetype         string
 	LinesAdded       int
 	LinesRemoved     int
-	GitCommit        string
+	GitBranch        string
 	ActionsPerMinute float64
 	WordsPerMinute   float64
 	Editor           string
@@ -67,12 +67,12 @@ func (db *DB) InsertActivity(a *Activity) error {
 	result, err := db.conn.Exec(`
 		INSERT INTO activities (
 			client_id, project, git_remote, started_at, ended_at, filename, filetype,
-			lines_added, lines_removed, git_commit,
+			lines_added, lines_removed, git_branch,
 			actions_per_minute, words_per_minute, editor, machine
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		a.ClientID, a.Project, a.GitRemote, a.StartedAt, a.EndedAt, a.Filename, a.Filetype,
-		a.LinesAdded, a.LinesRemoved, a.GitCommit,
+		a.LinesAdded, a.LinesRemoved, a.GitBranch,
 		a.ActionsPerMinute, a.WordsPerMinute, a.Editor, a.Machine,
 	)
 	if err != nil {
@@ -89,9 +89,14 @@ func (db *DB) InsertActivity(a *Activity) error {
 
 func (db *DB) GetUnsyncedActivities(limit int) ([]*Activity, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, client_id, project, git_remote, started_at, ended_at, filename, filetype,
-			   lines_added, lines_removed, git_commit,
-			   actions_per_minute, words_per_minute, editor, machine, created_at
+		SELECT id, client_id,
+			   COALESCE(project, ''), COALESCE(git_remote, ''),
+			   started_at, ended_at,
+			   COALESCE(filename, ''), COALESCE(filetype, ''),
+			   COALESCE(lines_added, 0), COALESCE(lines_removed, 0),
+			   COALESCE(git_branch, ''),
+			   COALESCE(actions_per_minute, 0), COALESCE(words_per_minute, 0),
+			   COALESCE(editor, 'neovim'), COALESCE(machine, ''), created_at
 		FROM activities
 		WHERE synced = FALSE
 		ORDER BY started_at ASC
@@ -107,7 +112,7 @@ func (db *DB) GetUnsyncedActivities(limit int) ([]*Activity, error) {
 		a := &Activity{}
 		err := rows.Scan(
 			&a.ID, &a.ClientID, &a.Project, &a.GitRemote, &a.StartedAt, &a.EndedAt, &a.Filename, &a.Filetype,
-			&a.LinesAdded, &a.LinesRemoved, &a.GitCommit,
+			&a.LinesAdded, &a.LinesRemoved, &a.GitBranch,
 			&a.ActionsPerMinute, &a.WordsPerMinute, &a.Editor, &a.Machine, &a.CreatedAt,
 		)
 		if err != nil {

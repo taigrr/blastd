@@ -34,7 +34,7 @@ type activityPayload struct {
 	Filetype         string  `json:"filetype,omitempty"`
 	LinesAdded       int     `json:"linesAdded"`
 	LinesRemoved     int     `json:"linesRemoved"`
-	GitCommit        string  `json:"gitCommit,omitempty"`
+	GitBranch        string  `json:"gitBranch,omitempty"`
 	ActionsPerMinute float64 `json:"actionsPerMinute,omitempty"`
 	WordsPerMinute   float64 `json:"wordsPerMinute,omitempty"`
 	Editor           string  `json:"editor"`
@@ -154,7 +154,7 @@ func (s *Syncer) syncBatch() (int, error) {
 			Filetype:         a.Filetype,
 			LinesAdded:       a.LinesAdded,
 			LinesRemoved:     a.LinesRemoved,
-			GitCommit:        a.GitCommit,
+			GitBranch:        a.GitBranch,
 			ActionsPerMinute: a.ActionsPerMinute,
 			WordsPerMinute:   a.WordsPerMinute,
 			Editor:           a.Editor,

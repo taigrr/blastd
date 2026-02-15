@@ -71,13 +71,18 @@ The Neovim plugin (`blast.nvim/lua/blast/tracker.lua`) sends activity data over 
 | -------------------- | ------ | ---------------------------------- |
 | `project`            | string | From git dir name or `.blast.toml` |
 | `git_remote`         | string | `origin` remote URL                |
+| `git_branch`         | string | Current HEAD branch name           |
 | `started_at`         | string | RFC 3339 UTC                       |
 | `ended_at`           | string | RFC 3339 UTC                       |
+| `filename`           | string | Relative path (nil if private)     |
 | `filetype`           | string | Vim filetype                       |
+| `lines_added`        | int    | Lines added during interval        |
+| `lines_removed`      | int    | Lines removed during interval      |
 | `actions_per_minute` | float  | Vim commands/min                   |
 | `words_per_minute`   | float  | Typing speed                       |
+| `editor`             | string | Always `"neovim"`                  |
 
-The plugin does **not** send: `lines_added`, `lines_removed`, `git_commit`, or `editor`. These are optional in the socket protocol. The `editor` field defaults to `"neovim"` if omitted.
+The `editor` field defaults to `"neovim"` if omitted. In private mode, `project`, `git_remote`, and `git_branch` are sent as `"private"`, and `filename` is `nil`.
 
 ## Integration With blast Server
 
@@ -88,7 +93,7 @@ The server API (`blast/app/api/activities/route.ts`) expects `POST /api/activiti
 - The server auto-creates `Project` records from `project`/`gitRemote` on first sync
 - Server computes `duration` from `startedAt`/`endedAt`
 
-Server Zod schema fields (all camelCase): `project`, `gitRemote`, `startedAt`, `endedAt`, `filetype`, `linesAdded`, `linesRemoved`, `gitCommit`, `actionsPerMinute`, `wordsPerMinute`, `editor`, `machine`.
+Server Zod schema fields (all camelCase): `project`, `gitRemote`, `startedAt`, `endedAt`, `filetype`, `linesAdded`, `linesRemoved`, `gitBranch`, `actionsPerMinute`, `wordsPerMinute`, `editor`, `machine`.
 
 The sync payload in `sync.go` uses matching camelCase JSON tags — these must stay aligned.
 
