@@ -4,48 +4,35 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/BurntSushi/toml"
+	"github.com/taigrr/jety"
 )
 
 type Config struct {
-	// Server settings
-	ServerURL string `toml:"server_url"`
-	APIToken  string `toml:"api_token"`
-
-	// Sync settings
-	SyncIntervalMinutes int `toml:"sync_interval_minutes"`
-	SyncBatchSize       int `toml:"sync_batch_size"`
-
-	// Socket path
-	SocketPath string `toml:"socket_path"`
-
-	// Database path
-	DBPath string `toml:"db_path"`
-
-	// Machine identifier
-	Machine string `toml:"machine"`
-}
-
-func DefaultConfig() *Config {
-	homeDir, _ := os.UserHomeDir()
-	dataDir := filepath.Join(homeDir, ".local", "share", "blastd")
-
-	hostname, _ := os.Hostname()
-
-	return &Config{
-		ServerURL:           "https://nvimblast.com",
-		SyncIntervalMinutes: 10,
-		SyncBatchSize:       100,
-		SocketPath:          filepath.Join(dataDir, "blastd.sock"),
-		DBPath:              filepath.Join(dataDir, "blast.db"),
-		Machine:             hostname,
-	}
+	ServerURL           string
+	APIToken            string
+	SyncIntervalMinutes int
+	SyncBatchSize       int
+	SocketPath          string
+	DBPath              string
+	Machine             string
 }
 
 func Load() (*Config, error) {
-	cfg := DefaultConfig()
+	homeDir, _ := os.UserHomeDir()
+	dataDir := filepath.Join(homeDir, ".local", "share", "blastd")
+	hostname, _ := os.Hostname()
 
-	// Try to load from config file
+	cm := jety.NewConfigManager().WithEnvPrefix("BLAST_")
+	cm.SetConfigType("toml")
+
+	cm.SetDefault("server_url", "https://nvimblast.com")
+	cm.SetDefault("auth_token", "")
+	cm.SetDefault("sync_interval_minutes", 10)
+	cm.SetDefault("sync_batch_size", 100)
+	cm.SetDefault("socket_path", filepath.Join(dataDir, "blastd.sock"))
+	cm.SetDefault("db_path", filepath.Join(dataDir, "blast.db"))
+	cm.SetDefault("machine", hostname)
+
 	var configPaths []string
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		configPaths = append(configPaths, filepath.Join(xdg, "blastd", "config.toml"))
@@ -56,16 +43,26 @@ func Load() (*Config, error) {
 
 	for _, path := range configPaths {
 		if _, err := os.Stat(path); err == nil {
-			if _, err := toml.DecodeFile(path, cfg); err != nil {
+			cm.SetConfigFile(path)
+			if err := cm.ReadInConfig(); err != nil {
 				return nil, err
 			}
 			break
 		}
 	}
 
-	// Ensure data directory exists
-	dataDir := filepath.Dir(cfg.DBPath)
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+	cfg := &Config{
+		ServerURL:           cm.GetString("server_url"),
+		APIToken:            cm.GetString("auth_token"),
+		SyncIntervalMinutes: cm.GetInt("sync_interval_minutes"),
+		SyncBatchSize:       cm.GetInt("sync_batch_size"),
+		SocketPath:          cm.GetString("socket_path"),
+		DBPath:              cm.GetString("db_path"),
+		Machine:             cm.GetString("machine"),
+	}
+
+	dbDir := filepath.Dir(cfg.DBPath)
+	if err := os.MkdirAll(dbDir, 0o755); err != nil {
 		return nil, err
 	}
 

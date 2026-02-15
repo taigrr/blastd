@@ -3,9 +3,11 @@ package socket
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/taigrr/blastd/internal/db"
@@ -17,8 +19,9 @@ type Request struct {
 }
 
 type Response struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	OK      bool   `json:"ok"`
+	Error   string `json:"error,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type ActivityData struct {
@@ -35,13 +38,24 @@ type ActivityData struct {
 	Editor           string  `json:"editor"`
 }
 
+type SyncFunc func() error
+
 type Server struct {
 	path     string
 	db       *db.DB
 	machine  string
+	syncFunc SyncFunc
 	listener net.Listener
 	done     chan struct{}
+
+	rateMu       sync.Mutex
+	syncRequests []time.Time
 }
+
+const (
+	syncRateLimit  = 10
+	syncRateWindow = 10 * time.Minute
+)
 
 func NewServer(path string, database *db.DB, machine string) *Server {
 	return &Server{
@@ -52,8 +66,11 @@ func NewServer(path string, database *db.DB, machine string) *Server {
 	}
 }
 
+func (s *Server) SetSyncFunc(fn SyncFunc) {
+	s.syncFunc = fn
+}
+
 func (s *Server) Start() error {
-	// Remove existing socket file
 	os.Remove(s.path)
 
 	listener, err := net.Listen("unix", s.path)
@@ -62,7 +79,6 @@ func (s *Server) Start() error {
 	}
 	s.listener = listener
 
-	// Set socket permissions
 	os.Chmod(s.path, 0600)
 
 	go s.accept()
@@ -114,12 +130,64 @@ func (s *Server) handle(conn net.Conn) {
 		switch req.Type {
 		case "activity":
 			s.handleActivity(req.Data, encoder)
+		case "sync":
+			s.handleSync(encoder)
 		case "ping":
 			encoder.Encode(Response{OK: true})
 		default:
 			encoder.Encode(Response{OK: false, Error: "unknown request type"})
 		}
 	}
+}
+
+func (s *Server) handleSync(encoder *json.Encoder) {
+	if s.syncFunc == nil {
+		encoder.Encode(Response{OK: false, Error: "sync not available"})
+		return
+	}
+
+	if err := s.checkSyncRateLimit(); err != nil {
+		encoder.Encode(Response{OK: false, Error: err.Error()})
+		return
+	}
+
+	s.recordSyncRequest()
+
+	if err := s.syncFunc(); err != nil {
+		encoder.Encode(Response{OK: false, Error: err.Error()})
+		return
+	}
+
+	encoder.Encode(Response{OK: true, Message: "sync complete"})
+}
+
+func (s *Server) checkSyncRateLimit() error {
+	s.rateMu.Lock()
+	defer s.rateMu.Unlock()
+
+	cutoff := time.Now().Add(-syncRateWindow)
+	recent := s.syncRequests[:0]
+	for _, t := range s.syncRequests {
+		if t.After(cutoff) {
+			recent = append(recent, t)
+		}
+	}
+	s.syncRequests = recent
+
+	if len(s.syncRequests) >= syncRateLimit {
+		oldest := s.syncRequests[0]
+		waitUntil := oldest.Add(syncRateWindow)
+		remaining := time.Until(waitUntil).Round(time.Second)
+		return fmt.Errorf("rate limited: try again in %s", remaining)
+	}
+
+	return nil
+}
+
+func (s *Server) recordSyncRequest() {
+	s.rateMu.Lock()
+	defer s.rateMu.Unlock()
+	s.syncRequests = append(s.syncRequests, time.Now())
 }
 
 func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {

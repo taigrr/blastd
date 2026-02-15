@@ -3,6 +3,7 @@ package socket
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"net"
 	"path/filepath"
 	"testing"
@@ -188,5 +189,74 @@ func TestInvalidJSON(t *testing.T) {
 	}
 	if resp.OK {
 		t.Error("expected OK = false for invalid json")
+	}
+}
+
+func TestSyncSuccess(t *testing.T) {
+	server, _ := setupTestSocket(t)
+	server.SetSyncFunc(func() error {
+		return nil
+	})
+
+	conn := dial(t, server)
+	resp := sendAndRecv(t, conn, Request{Type: "sync"})
+	if !resp.OK {
+		t.Errorf("sync: OK = false, error = %q", resp.Error)
+	}
+	if resp.Message != "sync complete" {
+		t.Errorf("Message = %q, want %q", resp.Message, "sync complete")
+	}
+}
+
+func TestSyncError(t *testing.T) {
+	server, _ := setupTestSocket(t)
+	server.SetSyncFunc(func() error {
+		return fmt.Errorf("no API token configured")
+	})
+
+	conn := dial(t, server)
+	resp := sendAndRecv(t, conn, Request{Type: "sync"})
+	if resp.OK {
+		t.Error("expected OK = false when sync returns error")
+	}
+	if resp.Error != "no API token configured" {
+		t.Errorf("Error = %q, want %q", resp.Error, "no API token configured")
+	}
+}
+
+func TestSyncNoFunc(t *testing.T) {
+	server, _ := setupTestSocket(t)
+
+	conn := dial(t, server)
+	resp := sendAndRecv(t, conn, Request{Type: "sync"})
+	if resp.OK {
+		t.Error("expected OK = false when no sync func set")
+	}
+	if resp.Error != "sync not available" {
+		t.Errorf("Error = %q, want %q", resp.Error, "sync not available")
+	}
+}
+
+func TestSyncRateLimit(t *testing.T) {
+	server, _ := setupTestSocket(t)
+	server.SetSyncFunc(func() error {
+		return nil
+	})
+
+	conn := dial(t, server)
+
+	for range syncRateLimit {
+		resp := sendAndRecv(t, conn, Request{Type: "sync"})
+		if !resp.OK {
+			t.Fatalf("sync %d: unexpected error: %q", syncRateLimit, resp.Error)
+		}
+	}
+
+	resp := sendAndRecv(t, conn, Request{Type: "sync"})
+	if resp.OK {
+		t.Error("expected rate limit error on request 11")
+	}
+	if len(resp.Error) < 10 {
+		t.Errorf("expected descriptive rate limit error, got %q", resp.Error)
 	}
 }

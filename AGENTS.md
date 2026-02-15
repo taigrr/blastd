@@ -55,12 +55,13 @@ socket.Server  ──► db.DB (SQLite)  ◄── sync.Syncer
 ```
 
 1. **Socket server** listens at `~/.local/share/blastd/blastd.sock` (permissions `0600`)
-2. Clients send newline-delimited JSON messages (`{"type": "activity", "data": {...}}` or `{"type": "ping"}`)
+2. Clients send newline-delimited JSON messages (`{"type": "activity", "data": {...}}`, `{"type": "ping"}`, or `{"type": "sync"}`)
 3. Activities are inserted into SQLite with `synced = FALSE`
 4. **Syncer** runs on a ticker (default 10 min), drains all unsynced activities in batches (default 100 per HTTP request), looping until the backlog is empty
 5. On failure, retries with exponential backoff (30s → 30min cap) before resuming the drain loop
 6. On successful sync, activities are marked `synced = TRUE`
 7. Syncer also drains on startup and on graceful shutdown
+8. Clients can trigger an immediate sync via `{"type": "sync"}` — rate-limited to 10 requests per 10-minute window
 
 ## Integration With blast.nvim
 
@@ -93,10 +94,10 @@ The sync payload in `sync.go` uses matching camelCase JSON tags — these must s
 
 ## Key Dependencies
 
-| Dependency                   | Purpose                                 |
-| ---------------------------- | --------------------------------------- |
-| `github.com/BurntSushi/toml` | TOML config file parsing                |
-| `modernc.org/sqlite`         | Pure-Go SQLite driver (no CGO required) |
+| Dependency                   | Purpose                                                      |
+| ---------------------------- | ------------------------------------------------------------ |
+| `github.com/taigrr/jety`     | Config loading (TOML files + env vars with `BLAST_` prefix)  |
+| `modernc.org/sqlite`         | Pure-Go SQLite driver (no CGO required)                      |
 
 No HTTP framework — uses `net/http` stdlib. No logging framework — uses `log` stdlib.
 
@@ -104,15 +105,17 @@ No HTTP framework — uses `net/http` stdlib. No logging framework — uses `log
 
 Config file: `$XDG_CONFIG_HOME/blastd/config.toml` or `~/.config/blastd/config.toml`
 
-| Field                   | Default                             | Notes                                                                 |
-| ----------------------- | ----------------------------------- | --------------------------------------------------------------------- |
-| `server_url`            | `https://nvimblast.com`             | Blast server base URL                                                 |
-| `api_token`             | _(empty)_                           | Required for sync; without it, sync is skipped with a log warning     |
-| `sync_interval_minutes` | `10`                                | How often to push activities                                          |
-| `sync_batch_size`       | `100`                               | Max activities per HTTP request (backlog is fully drained each cycle) |
-| `socket_path`           | `~/.local/share/blastd/blastd.sock` | Unix socket location                                                  |
-| `db_path`               | `~/.local/share/blastd/blast.db`    | SQLite database location                                              |
-| `machine`               | OS hostname                         | Machine identifier sent with each activity                            |
+| Field                   | Env Var                          | Default                             | Notes                                                                 |
+| ----------------------- | -------------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
+| `server_url`            | `BLAST_SERVER_URL`               | `https://nvimblast.com`             | Blast server base URL                                                 |
+| `auth_token`            | `BLAST_AUTH_TOKEN`               | _(empty)_                           | Required for sync; without it, sync is skipped with a log warning     |
+| `sync_interval_minutes` | `BLAST_SYNC_INTERVAL_MINUTES`    | `10`                                | How often to push activities                                          |
+| `sync_batch_size`       | `BLAST_SYNC_BATCH_SIZE`          | `100`                               | Max activities per HTTP request (backlog is fully drained each cycle) |
+| `socket_path`           | `BLAST_SOCKET_PATH`              | `~/.local/share/blastd/blastd.sock` | Unix socket location                                                  |
+| `db_path`               | `BLAST_DB_PATH`                  | `~/.local/share/blastd/blast.db`    | SQLite database location                                              |
+| `machine`               | `BLAST_MACHINE`                  | OS hostname                         | Machine identifier sent with each activity                            |
+
+All config fields can be set via environment variables with the `BLAST_` prefix. Config file values take precedence over env vars, which take precedence over defaults.
 
 ## Code Patterns & Conventions
 
