@@ -25,7 +25,7 @@ type Syncer struct {
 }
 
 type activityPayload struct {
-	ClientID         string  `json:"clientId"`
+	ClientUUID       string  `json:"clientUUID"`
 	Project          string  `json:"project,omitempty"`
 	GitRemote        string  `json:"gitRemote,omitempty"`
 	StartedAt        string  `json:"startedAt"`
@@ -145,7 +145,7 @@ func (s *Syncer) syncBatch() (int, error) {
 			filename = ""
 		}
 		payloads[i] = activityPayload{
-			ClientID:         a.ClientID,
+			ClientUUID:       a.ClientID,
 			Project:          project,
 			GitRemote:        gitRemote,
 			StartedAt:        a.StartedAt.Format(time.RFC3339),
