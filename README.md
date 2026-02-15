@@ -8,6 +8,9 @@ Local daemon for [Blast](https://nvimblast.com) activity tracking. Caches activi
 go install github.com/taigrr/blastd@latest
 ```
 
+blastd is automatically started by the [blast.nvim](https://github.com/taigrr/blast.nvim) plugin, so running it manually is optional.
+Note, that if blastd hasn't received any data for a while, it will also automatically stop itself to save resources, and will be restarted by blast.nvim when you start coding again.
+
 ## Configuration
 
 Create `~/.config/blastd/config.toml`:
@@ -17,43 +20,65 @@ Create `~/.config/blastd/config.toml`:
 server_url = "https://nvimblast.com"
 
 # API token from nvimblast.com/dashboard
-api_token = "blast_xxxxx"
+auth_token = "blast_xxxxx"
 
 # Sync interval in minutes (default: 10)
 sync_interval_minutes = 10
 
 # Machine identifier (default: hostname)
 machine = "macbook-pro"
+
+# Metrics-only mode — sends "private" for project name and git remote
+# Useful if you want time/filetype/APM stats without revealing what you work on
+# metrics_only = true
 ```
+
+All config fields can also be set via environment variables with the `BLAST_` prefix:
+
+| Config Key              | Env Var                       | Default                             |
+| ----------------------- | ----------------------------- | ----------------------------------- |
+| `server_url`            | `BLAST_SERVER_URL`            | `https://nvimblast.com`             |
+| `auth_token`            | `BLAST_AUTH_TOKEN`            | _(empty)_                           |
+| `sync_interval_minutes` | `BLAST_SYNC_INTERVAL_MINUTES` | `10`                                |
+| `sync_batch_size`       | `BLAST_SYNC_BATCH_SIZE`       | `100`                               |
+| `socket_path`           | `BLAST_SOCKET_PATH`           | `~/.local/share/blastd/blastd.sock` |
+| `db_path`               | `BLAST_DB_PATH`               | `~/.local/share/blastd/blast.db`    |
+| `machine`               | `BLAST_MACHINE`               | OS hostname                         |
+| `metrics_only`          | `BLAST_METRICS_ONLY`          | `false`                             |
+
+Config file values take precedence over env vars, which take precedence over defaults.
 
 ## Usage
 
-Run the daemon:
-
 ```bash
 blastd
+blastd --version
+blastd --help
 ```
 
-For systemd, create `~/.config/systemd/user/blastd.service`:
+## Privacy
 
-```ini
-[Unit]
-Description=Blast activity tracking daemon
-After=network.target
+Project names are never shown publicly, but they are sent to the Blast server so you can see a per-project breakdown on your own profile.
+If you'd rather not share project names at all — whether it's a secret project or just a preference — there are two ways to opt out:
 
-[Service]
-ExecStart=%h/go/bin/blastd
-Restart=on-failure
+### Per-project: `.blast.toml`
 
-[Install]
-WantedBy=default.target
+Create a `.blast.toml` anywhere between a file and its git root:
+
+```toml
+# Override the project name (default: git directory name)
+name = "my-project"
+
+# Mark as private — activity is still synced, but project name and git remote
+# are replaced with "private" so the server only sees time, filetype, and metrics
+private = true
 ```
 
-Then:
+The editor plugin (e.g. blast.nvim) walks up from the current file to the git root, using the closest `.blast.toml` it finds. This supports monorepos — place `.blast.toml` in subdirectories to give them distinct names or mark specific folders as private.
 
-```bash
-systemctl --user enable --now blastd
-```
+### Global: metrics-only mode
+
+Set `metrics_only = true` in `config.toml` or `BLAST_METRICS_ONLY=true` in your environment. This replaces **all** project names and git remotes with `"private"` at sync time, regardless of per-project `.blast.toml` settings. Useful if you want to track your coding habits without revealing any project information.
 
 ## Socket Protocol
 
@@ -84,7 +109,15 @@ The daemon listens on a Unix socket at `~/.local/share/blastd/blastd.sock`.
 { "type": "ping" }
 ```
 
+### Sync
+
+Trigger an immediate sync (rate-limited to 10 requests per 10-minute window):
+
+```json
+{ "type": "sync" }
+```
+
 ## Related Projects
 
-- [blast](https://github.com/taigrr/blast) - Web dashboard and API
-- [blast.nvim](https://github.com/taigrr/blast.nvim) - Neovim plugin
+- [blast](https://github.com/taigrr/blast) - Web dashboard and API (private)
+- [blast.nvim](https://github.com/taigrr/blast.nvim) - Neovim plugin (FOSS)

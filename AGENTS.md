@@ -114,6 +114,7 @@ Config file: `$XDG_CONFIG_HOME/blastd/config.toml` or `~/.config/blastd/config.t
 | `socket_path`           | `BLAST_SOCKET_PATH`              | `~/.local/share/blastd/blastd.sock` | Unix socket location                                                  |
 | `db_path`               | `BLAST_DB_PATH`                  | `~/.local/share/blastd/blast.db`    | SQLite database location                                              |
 | `machine`               | `BLAST_MACHINE`                  | OS hostname                         | Machine identifier sent with each activity                            |
+| `metrics_only`          | `BLAST_METRICS_ONLY`             | `false`                             | Replace all project/remote with "private" at sync time                |
 
 All config fields can be set via environment variables with the `BLAST_` prefix. Config file values take precedence over env vars, which take precedence over defaults.
 

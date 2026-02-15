@@ -29,6 +29,7 @@ type ActivityData struct {
 	GitRemote        string  `json:"git_remote"`
 	StartedAt        string  `json:"started_at"`
 	EndedAt          string  `json:"ended_at"`
+	Filename         string  `json:"filename"`
 	Filetype         string  `json:"filetype"`
 	LinesAdded       int     `json:"lines_added"`
 	LinesRemoved     int     `json:"lines_removed"`
@@ -219,6 +220,7 @@ func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {
 		GitRemote:        ad.GitRemote,
 		StartedAt:        startedAt,
 		EndedAt:          endedAt,
+		Filename:         ad.Filename,
 		Filetype:         ad.Filetype,
 		LinesAdded:       ad.LinesAdded,
 		LinesRemoved:     ad.LinesRemoved,

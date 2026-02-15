@@ -2,17 +2,22 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
 )
 
 type Activity struct {
 	ID               int64
+	ClientID         string
 	Project          string
 	GitRemote        string
 	StartedAt        time.Time
 	EndedAt          time.Time
+	Filename         string
 	Filetype         string
 	LinesAdded       int
 	LinesRemoved     int
@@ -35,54 +40,38 @@ func Open(path string) (*DB, error) {
 		return nil, err
 	}
 
-	db := &DB{conn: conn}
-	if err := db.migrate(); err != nil {
+	goose.SetBaseFS(FS)
+
+	if err := goose.SetDialect("sqlite3"); err != nil {
 		conn.Close()
-		return nil, err
+		return nil, fmt.Errorf("failed to set dialect: %w", err)
 	}
 
-	return db, nil
+	if err := goose.Up(conn, "migrations"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to apply migrations: %w", err)
+	}
+
+	return &DB{conn: conn}, nil
 }
 
 func (db *DB) Close() error {
 	return db.conn.Close()
 }
 
-func (db *DB) migrate() error {
-	_, err := db.conn.Exec(`
-		CREATE TABLE IF NOT EXISTS activities (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			project TEXT,
-			git_remote TEXT,
-			started_at DATETIME NOT NULL,
-			ended_at DATETIME NOT NULL,
-			filetype TEXT,
-			lines_added INTEGER DEFAULT 0,
-			lines_removed INTEGER DEFAULT 0,
-			git_commit TEXT,
-			actions_per_minute REAL,
-			words_per_minute REAL,
-			editor TEXT DEFAULT 'neovim',
-			machine TEXT,
-			synced BOOLEAN DEFAULT FALSE,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_activities_synced ON activities(synced);
-		CREATE INDEX IF NOT EXISTS idx_activities_started_at ON activities(started_at);
-	`)
-	return err
-}
-
 func (db *DB) InsertActivity(a *Activity) error {
+	if a.ClientID == "" {
+		a.ClientID = uuid.NewString()
+	}
+
 	result, err := db.conn.Exec(`
 		INSERT INTO activities (
-			project, git_remote, started_at, ended_at, filetype,
+			client_id, project, git_remote, started_at, ended_at, filename, filetype,
 			lines_added, lines_removed, git_commit,
 			actions_per_minute, words_per_minute, editor, machine
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
-		a.Project, a.GitRemote, a.StartedAt, a.EndedAt, a.Filetype,
+		a.ClientID, a.Project, a.GitRemote, a.StartedAt, a.EndedAt, a.Filename, a.Filetype,
 		a.LinesAdded, a.LinesRemoved, a.GitCommit,
 		a.ActionsPerMinute, a.WordsPerMinute, a.Editor, a.Machine,
 	)
@@ -100,7 +89,7 @@ func (db *DB) InsertActivity(a *Activity) error {
 
 func (db *DB) GetUnsyncedActivities(limit int) ([]*Activity, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, project, git_remote, started_at, ended_at, filetype,
+		SELECT id, client_id, project, git_remote, started_at, ended_at, filename, filetype,
 			   lines_added, lines_removed, git_commit,
 			   actions_per_minute, words_per_minute, editor, machine, created_at
 		FROM activities
@@ -117,7 +106,7 @@ func (db *DB) GetUnsyncedActivities(limit int) ([]*Activity, error) {
 	for rows.Next() {
 		a := &Activity{}
 		err := rows.Scan(
-			&a.ID, &a.Project, &a.GitRemote, &a.StartedAt, &a.EndedAt, &a.Filetype,
+			&a.ID, &a.ClientID, &a.Project, &a.GitRemote, &a.StartedAt, &a.EndedAt, &a.Filename, &a.Filetype,
 			&a.LinesAdded, &a.LinesRemoved, &a.GitCommit,
 			&a.ActionsPerMinute, &a.WordsPerMinute, &a.Editor, &a.Machine, &a.CreatedAt,
 		)

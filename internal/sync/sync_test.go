@@ -25,7 +25,7 @@ func setupTestSyncer(t *testing.T, handler http.Handler) (*Syncer, *db.DB) {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	syncer := NewSyncer(database, server.URL, "test-token", 60, 10)
+	syncer := NewSyncer(database, server.URL, "test-token", 60, 10, false)
 	return syncer, database
 }
 
@@ -297,5 +297,56 @@ func TestSyncPayloadFormat(t *testing.T) {
 	}
 	if a.StartedAt == "" {
 		t.Error("StartedAt should not be empty")
+	}
+}
+
+func TestSyncMetricsOnly(t *testing.T) {
+	var receivedBody syncRequest
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&receivedBody)
+		resp := syncResponse{Success: true, Count: len(receivedBody.Activities)}
+		for range receivedBody.Activities {
+			resp.Activities = append(resp.Activities, struct {
+				ID string `json:"id"`
+			}{ID: "test-id"})
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	syncer := NewSyncer(database, server.URL, "test-token", 60, 10, true)
+
+	insertActivities(t, database, 1)
+
+	n, err := syncer.syncBatch()
+	if err != nil {
+		t.Fatalf("syncBatch() error: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("synced %d, want 1", n)
+	}
+
+	a := receivedBody.Activities[0]
+	if a.Project != "private" {
+		t.Errorf("Project = %q, want %q", a.Project, "private")
+	}
+	if a.GitRemote != "private" {
+		t.Errorf("GitRemote = %q, want %q", a.GitRemote, "private")
+	}
+	if a.Editor != "neovim" {
+		t.Errorf("Editor = %q, want %q (should still be sent)", a.Editor, "neovim")
+	}
+	if a.Filetype != "go" {
+		t.Errorf("Filetype = %q, want %q (should still be sent)", a.Filetype, "go")
 	}
 }

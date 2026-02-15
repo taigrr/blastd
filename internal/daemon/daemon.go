@@ -23,7 +23,7 @@ func New(cfg *config.Config) (*Daemon, error) {
 	}
 
 	socketServer := socket.NewServer(cfg.SocketPath, database, cfg.Machine)
-	syncer := sync.NewSyncer(database, cfg.ServerURL, cfg.APIToken, cfg.SyncIntervalMinutes, cfg.SyncBatchSize)
+	syncer := sync.NewSyncer(database, cfg.ServerURL, cfg.APIToken, cfg.SyncIntervalMinutes, cfg.SyncBatchSize, cfg.MetricsOnly)
 	socketServer.SetSyncFunc(syncer.SyncNow)
 
 	return &Daemon{

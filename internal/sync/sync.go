@@ -12,22 +12,25 @@ import (
 )
 
 type Syncer struct {
-	db         *db.DB
-	serverURL  string
-	apiToken   string
-	interval   time.Duration
-	batchSize  int
-	backoff    time.Duration
-	minBackoff time.Duration
-	maxBackoff time.Duration
-	done       chan struct{}
+	db          *db.DB
+	serverURL   string
+	apiToken    string
+	interval    time.Duration
+	batchSize   int
+	metricsOnly bool
+	backoff     time.Duration
+	minBackoff  time.Duration
+	maxBackoff  time.Duration
+	done        chan struct{}
 }
 
 type activityPayload struct {
+	ClientID         string  `json:"clientId"`
 	Project          string  `json:"project,omitempty"`
 	GitRemote        string  `json:"gitRemote,omitempty"`
 	StartedAt        string  `json:"startedAt"`
 	EndedAt          string  `json:"endedAt"`
+	Filename         string  `json:"filename,omitempty"`
 	Filetype         string  `json:"filetype,omitempty"`
 	LinesAdded       int     `json:"linesAdded"`
 	LinesRemoved     int     `json:"linesRemoved"`
@@ -50,16 +53,17 @@ type syncResponse struct {
 	} `json:"activities"`
 }
 
-func NewSyncer(database *db.DB, serverURL, apiToken string, intervalMinutes, batchSize int) *Syncer {
+func NewSyncer(database *db.DB, serverURL, apiToken string, intervalMinutes, batchSize int, metricsOnly bool) *Syncer {
 	return &Syncer{
-		db:         database,
-		serverURL:  serverURL,
-		apiToken:   apiToken,
-		interval:   time.Duration(intervalMinutes) * time.Minute,
-		batchSize:  batchSize,
-		minBackoff: 30 * time.Second,
-		maxBackoff: 30 * time.Minute,
-		done:       make(chan struct{}),
+		db:          database,
+		serverURL:   serverURL,
+		apiToken:    apiToken,
+		interval:    time.Duration(intervalMinutes) * time.Minute,
+		batchSize:   batchSize,
+		metricsOnly: metricsOnly,
+		minBackoff:  30 * time.Second,
+		maxBackoff:  30 * time.Minute,
+		done:        make(chan struct{}),
 	}
 }
 
@@ -132,11 +136,21 @@ func (s *Syncer) syncBatch() (int, error) {
 
 	payloads := make([]activityPayload, len(activities))
 	for i, a := range activities {
+		project := a.Project
+		gitRemote := a.GitRemote
+		filename := a.Filename
+		if s.metricsOnly {
+			project = "private"
+			gitRemote = "private"
+			filename = ""
+		}
 		payloads[i] = activityPayload{
-			Project:          a.Project,
-			GitRemote:        a.GitRemote,
+			ClientID:         a.ClientID,
+			Project:          project,
+			GitRemote:        gitRemote,
 			StartedAt:        a.StartedAt.Format(time.RFC3339),
 			EndedAt:          a.EndedAt.Format(time.RFC3339),
+			Filename:         filename,
 			Filetype:         a.Filetype,
 			LinesAdded:       a.LinesAdded,
 			LinesRemoved:     a.LinesRemoved,

@@ -15,6 +15,7 @@ type Config struct {
 	SocketPath          string
 	DBPath              string
 	Machine             string
+	MetricsOnly         bool
 }
 
 func Load() (*Config, error) {
@@ -32,6 +33,7 @@ func Load() (*Config, error) {
 	cm.SetDefault("socket_path", filepath.Join(dataDir, "blastd.sock"))
 	cm.SetDefault("db_path", filepath.Join(dataDir, "blast.db"))
 	cm.SetDefault("machine", hostname)
+	cm.SetDefault("metrics_only", false)
 
 	var configPaths []string
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
@@ -59,6 +61,7 @@ func Load() (*Config, error) {
 		SocketPath:          cm.GetString("socket_path"),
 		DBPath:              cm.GetString("db_path"),
 		Machine:             cm.GetString("machine"),
+		MetricsOnly:         cm.GetBool("metrics_only"),
 	}
 
 	dbDir := filepath.Dir(cfg.DBPath)
