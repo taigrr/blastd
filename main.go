@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/charmbracelet/fang"
@@ -13,7 +14,37 @@ import (
 	"github.com/taigrr/blastd/internal/daemon"
 )
 
-var version = "dev"
+var version = buildVersion()
+
+func buildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+
+	var revision, modified string
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			revision = s.Value
+		case "vcs.modified":
+			if s.Value == "true" {
+				modified = "-dirty"
+			}
+		}
+	}
+
+	if revision == "" {
+		return "dev"
+	}
+
+	// Shorten to 7 chars like git
+	if len(revision) > 7 {
+		revision = revision[:7]
+	}
+
+	return revision + modified
+}
 
 func main() {
 	cmd := &cobra.Command{
