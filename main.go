@@ -22,6 +22,12 @@ func buildVersion() string {
 		return "dev"
 	}
 
+	// For remote installs (go install module@version), use module version
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+
+	// For local builds, use VCS info
 	var revision, modified string
 	for _, s := range info.Settings {
 		switch s.Key {
