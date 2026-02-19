@@ -119,5 +119,4 @@ Trigger an immediate sync (rate-limited to 10 requests per 10-minute window):
 
 ## Related Projects
 
-- [blast](https://github.com/taigrr/blast) - Web dashboard and API (private)
 - [blast.nvim](https://github.com/taigrr/blast.nvim) - Neovim plugin (FOSS)
