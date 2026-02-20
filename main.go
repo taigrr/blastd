@@ -14,20 +14,25 @@ import (
 	"github.com/taigrr/blastd/internal/daemon"
 )
 
-var version = buildVersion()
+// version is set at build time via ldflags by GoReleaser.
+// When empty (local builds), falls back to VCS info.
+var version string
 
-func buildVersion() string {
+func init() {
+	if version != "" {
+		return
+	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return "dev"
+		version = "dev"
+		return
 	}
 
-	// For remote installs (go install module@version), use module version
 	if info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
+		version = info.Main.Version
+		return
 	}
 
-	// For local builds, use VCS info
 	var revision, modified string
 	for _, s := range info.Settings {
 		switch s.Key {
@@ -41,15 +46,15 @@ func buildVersion() string {
 	}
 
 	if revision == "" {
-		return "dev"
+		version = "dev"
+		return
 	}
 
-	// Shorten to 7 chars like git
 	if len(revision) > 7 {
 		revision = revision[:7]
 	}
 
-	return revision + modified
+	version = revision + modified
 }
 
 func main() {
