@@ -101,7 +101,7 @@ func TestLoadEnvVarOverride(t *testing.T) {
 	}
 }
 
-func TestLoadFileOverridesEnv(t *testing.T) {
+func TestLoadEnvOverridesFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, "blastd")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -123,8 +123,9 @@ func TestLoadFileOverridesEnv(t *testing.T) {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.ServerURL != "https://file.example.com" {
-		t.Errorf("ServerURL = %q, want file value, got env value", cfg.ServerURL)
+	if cfg.ServerURL != "https://env.example.com" {
+		// Env vars take precedence over file values (overrides > env > file > defaults)
+		t.Errorf("ServerURL = %q, want env value", cfg.ServerURL)
 	}
 }
 
