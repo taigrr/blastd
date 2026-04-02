@@ -140,6 +140,53 @@ func TestMarkSynced(t *testing.T) {
 	}
 }
 
+func TestGetStats(t *testing.T) {
+	database := setupTestDB(t)
+
+	stats, err := database.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats() error: %v", err)
+	}
+	if stats.Total != 0 || stats.Unsynced != 0 {
+		t.Errorf("empty db: total=%d unsynced=%d, want 0/0", stats.Total, stats.Unsynced)
+	}
+
+	now := time.Now()
+	var ids []int64
+	for i := range 3 {
+		a := &Activity{
+			Project:   "blast",
+			StartedAt: now.Add(time.Duration(i) * time.Minute),
+			EndedAt:   now.Add(time.Duration(i+1) * time.Minute),
+			Editor:    "neovim",
+		}
+		if err := database.InsertActivity(a); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, a.ID)
+	}
+
+	stats, err = database.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats() error: %v", err)
+	}
+	if stats.Total != 3 || stats.Unsynced != 3 {
+		t.Errorf("after insert: total=%d unsynced=%d, want 3/3", stats.Total, stats.Unsynced)
+	}
+
+	if err := database.MarkSynced(ids[:2]); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err = database.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats() error: %v", err)
+	}
+	if stats.Total != 3 || stats.Unsynced != 1 {
+		t.Errorf("after mark: total=%d unsynced=%d, want 3/1", stats.Total, stats.Unsynced)
+	}
+}
+
 func TestMarkSyncedEmpty(t *testing.T) {
 	database := setupTestDB(t)
 	if err := database.MarkSynced(nil); err != nil {

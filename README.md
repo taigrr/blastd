@@ -109,6 +109,20 @@ The daemon listens on a Unix socket at `~/.local/share/blastd/blastd.sock`.
 { "type": "ping" }
 ```
 
+### Status
+
+Check how many activities are stored locally and how many are pending sync:
+
+```json
+{ "type": "status" }
+```
+
+Response:
+
+```json
+{ "ok": true, "total": 142, "unsynced": 3 }
+```
+
 ### Sync
 
 Trigger an immediate sync (rate-limited to 10 requests per 10-minute window):

@@ -55,7 +55,7 @@ socket.Server  ──► db.DB (SQLite)  ◄── sync.Syncer
 ```
 
 1. **Socket server** listens at `~/.local/share/blastd/blastd.sock` (permissions `0600`)
-2. Clients send newline-delimited JSON messages (`{"type": "activity", "data": {...}}`, `{"type": "ping"}`, or `{"type": "sync"}`)
+2. Clients send newline-delimited JSON messages (`{"type": "activity", "data": {...}}`, `{"type": "ping"}`, `{"type": "sync"}`, or `{"type": "status"}`)
 3. Activities are inserted into SQLite with `synced = FALSE`
 4. **Syncer** runs on a ticker (default 10 min), drains all unsynced activities in batches (default 100 per HTTP request), looping until the backlog is empty
 5. On failure, retries with exponential backoff (30s → 30min cap) before resuming the drain loop

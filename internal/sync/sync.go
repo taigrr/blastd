@@ -22,6 +22,7 @@ type Syncer struct {
 	minBackoff  time.Duration
 	maxBackoff  time.Duration
 	done        chan struct{}
+	client      *http.Client
 }
 
 type activityPayload struct {
@@ -53,6 +54,8 @@ type syncResponse struct {
 	} `json:"activities"`
 }
 
+const httpTimeout = 30 * time.Second
+
 func NewSyncer(database *db.DB, serverURL, apiToken string, intervalMinutes, batchSize int, metricsOnly bool) *Syncer {
 	return &Syncer{
 		db:          database,
@@ -64,6 +67,7 @@ func NewSyncer(database *db.DB, serverURL, apiToken string, intervalMinutes, bat
 		minBackoff:  30 * time.Second,
 		maxBackoff:  30 * time.Minute,
 		done:        make(chan struct{}),
+		client:      &http.Client{Timeout: httpTimeout},
 	}
 }
 
@@ -175,7 +179,7 @@ func (s *Syncer) syncBatch() (int, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.apiToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("request failed: %w", err)
 	}
