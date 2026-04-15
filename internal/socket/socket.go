@@ -19,9 +19,11 @@ type Request struct {
 }
 
 type Response struct {
-	OK      bool   `json:"ok"`
-	Error   string `json:"error,omitempty"`
-	Message string `json:"message,omitempty"`
+	OK       bool   `json:"ok"`
+	Error    string `json:"error,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Total    *int64 `json:"total,omitempty"`
+	Unsynced *int64 `json:"unsynced,omitempty"`
 }
 
 type ActivityData struct {
@@ -133,6 +135,8 @@ func (s *Server) handle(conn net.Conn) {
 			s.handleActivity(req.Data, encoder)
 		case "sync":
 			s.handleSync(encoder)
+		case "status":
+			s.handleStatus(encoder)
 		case "ping":
 			encoder.Encode(Response{OK: true})
 		default:
@@ -189,6 +193,15 @@ func (s *Server) recordSyncRequest() {
 	s.rateMu.Lock()
 	defer s.rateMu.Unlock()
 	s.syncRequests = append(s.syncRequests, time.Now())
+}
+
+func (s *Server) handleStatus(encoder *json.Encoder) {
+	stats, err := s.db.GetStats()
+	if err != nil {
+		encoder.Encode(Response{OK: false, Error: err.Error()})
+		return
+	}
+	encoder.Encode(Response{OK: true, Total: &stats.Total, Unsynced: &stats.Unsynced})
 }
 
 func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {

@@ -237,6 +237,46 @@ func TestSyncNoFunc(t *testing.T) {
 	}
 }
 
+func TestStatus(t *testing.T) {
+	server, database := setupTestSocket(t)
+
+	conn := dial(t, server)
+	resp := sendAndRecv(t, conn, Request{Type: "status"})
+	if !resp.OK {
+		t.Fatalf("status: OK = false, error = %q", resp.Error)
+	}
+	if resp.Total == nil || resp.Unsynced == nil {
+		t.Fatal("status: expected total and unsynced fields")
+	}
+	if *resp.Total != 0 || *resp.Unsynced != 0 {
+		t.Errorf("empty db: total=%d unsynced=%d, want 0/0", *resp.Total, *resp.Unsynced)
+	}
+
+	now := time.Now().UTC()
+	activity := map[string]any{
+		"type": "activity",
+		"data": map[string]any{
+			"project":    "blast",
+			"started_at": now.Add(-5 * time.Minute).Format(time.RFC3339),
+			"ended_at":   now.Format(time.RFC3339),
+		},
+	}
+	insertResp := sendAndRecv(t, conn, activity)
+	if !insertResp.OK {
+		t.Fatalf("insert: OK = false, error = %q", insertResp.Error)
+	}
+
+	resp = sendAndRecv(t, conn, Request{Type: "status"})
+	if !resp.OK {
+		t.Fatalf("status after insert: OK = false, error = %q", resp.Error)
+	}
+	if *resp.Total != 1 || *resp.Unsynced != 1 {
+		t.Errorf("after insert: total=%d unsynced=%d, want 1/1", *resp.Total, *resp.Unsynced)
+	}
+
+	_ = database // keep linter happy
+}
+
 func TestSyncRateLimit(t *testing.T) {
 	server, _ := setupTestSocket(t)
 	server.SetSyncFunc(func() error {

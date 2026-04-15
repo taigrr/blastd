@@ -123,6 +123,27 @@ func (db *DB) GetUnsyncedActivities(limit int) ([]*Activity, error) {
 	return activities, rows.Err()
 }
 
+// Stats holds aggregate counts from the activities table.
+type Stats struct {
+	Total    int64
+	Unsynced int64
+}
+
+// GetStats returns total and unsynced activity counts.
+func (db *DB) GetStats() (*Stats, error) {
+	var s Stats
+	err := db.conn.QueryRow(`
+		SELECT
+			COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE synced = FALSE) AS unsynced
+		FROM activities
+	`).Scan(&s.Total, &s.Unsynced)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 func (db *DB) MarkSynced(ids []int64) error {
 	if len(ids) == 0 {
 		return nil
