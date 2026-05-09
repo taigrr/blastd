@@ -20,7 +20,11 @@ func setupTestSyncer(t *testing.T, handler http.Handler) (*Syncer, *db.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { database.Close() })
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("Close() error: %v", err)
+		}
+	})
 
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
@@ -48,22 +52,26 @@ func insertActivities(t *testing.T, database *db.DB, n int) {
 	}
 }
 
-func okHandler() http.HandlerFunc {
+func okHandler(t *testing.T) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req syncRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Decode() error: %v", err)
+		}
 		resp := syncResponse{Success: true, Count: len(req.Activities)}
 		for range req.Activities {
 			resp.Activities = append(resp.Activities, struct {
 				ID string `json:"id"`
 			}{ID: "test-id"})
 		}
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
 	}
 }
 
 func TestSyncBatchSuccess(t *testing.T) {
-	syncer, database := setupTestSyncer(t, okHandler())
+	syncer, database := setupTestSyncer(t, okHandler(t))
 
 	insertActivities(t, database, 5)
 
@@ -85,7 +93,7 @@ func TestSyncBatchSuccess(t *testing.T) {
 }
 
 func TestSyncBatchEmpty(t *testing.T) {
-	syncer, _ := setupTestSyncer(t, okHandler())
+	syncer, _ := setupTestSyncer(t, okHandler(t))
 
 	n, err := syncer.syncBatch()
 	if err != nil {
@@ -120,7 +128,9 @@ func TestSyncBatchServerError(t *testing.T) {
 
 func TestSyncBatchServerFailure(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(syncResponse{Success: false})
+		if err := json.NewEncoder(w).Encode(syncResponse{Success: false}); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
 	})
 
 	syncer, database := setupTestSyncer(t, handler)
@@ -141,7 +151,7 @@ func TestSyncBatchServerFailure(t *testing.T) {
 }
 
 func TestDrainBacklogMultipleBatches(t *testing.T) {
-	syncer, database := setupTestSyncer(t, okHandler())
+	syncer, database := setupTestSyncer(t, okHandler(t))
 	syncer.batchSize = 3
 
 	insertActivities(t, database, 7)
@@ -158,7 +168,7 @@ func TestDrainBacklogMultipleBatches(t *testing.T) {
 }
 
 func TestDrainBacklogNoToken(t *testing.T) {
-	syncer, database := setupTestSyncer(t, okHandler())
+	syncer, database := setupTestSyncer(t, okHandler(t))
 	syncer.apiToken = ""
 
 	insertActivities(t, database, 3)
@@ -174,7 +184,7 @@ func TestDrainBacklogNoToken(t *testing.T) {
 }
 
 func TestBackoffIncreases(t *testing.T) {
-	syncer, _ := setupTestSyncer(t, okHandler())
+	syncer, _ := setupTestSyncer(t, okHandler(t))
 
 	syncer.increaseBackoff()
 	if syncer.backoff != syncer.minBackoff {
@@ -194,7 +204,7 @@ func TestBackoffIncreases(t *testing.T) {
 }
 
 func TestBackoffResets(t *testing.T) {
-	syncer, _ := setupTestSyncer(t, okHandler())
+	syncer, _ := setupTestSyncer(t, okHandler(t))
 
 	syncer.increaseBackoff()
 	syncer.increaseBackoff()
@@ -215,14 +225,18 @@ func TestDrainBacklogRetriesOnError(t *testing.T) {
 			return
 		}
 		var req syncRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Decode() error: %v", err)
+		}
 		resp := syncResponse{Success: true, Count: len(req.Activities)}
 		for range req.Activities {
 			resp.Activities = append(resp.Activities, struct {
 				ID string `json:"id"`
 			}{ID: "test-id"})
 		}
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
 	})
 
 	syncer, database := setupTestSyncer(t, handler)
@@ -259,7 +273,9 @@ func TestSyncPayloadFormat(t *testing.T) {
 			t.Errorf("Content-Type = %q, want %q", r.Header.Get("Content-Type"), "application/json")
 		}
 
-		json.NewDecoder(r.Body).Decode(&receivedBody)
+		if err := json.NewDecoder(r.Body).Decode(&receivedBody); err != nil {
+			t.Fatalf("Decode() error: %v", err)
+		}
 
 		resp := syncResponse{Success: true, Count: len(receivedBody.Activities)}
 		for range receivedBody.Activities {
@@ -267,7 +283,9 @@ func TestSyncPayloadFormat(t *testing.T) {
 				ID string `json:"id"`
 			}{ID: "test-id"})
 		}
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
 	})
 
 	syncer, database := setupTestSyncer(t, handler)
@@ -304,14 +322,18 @@ func TestSyncMetricsOnly(t *testing.T) {
 	var receivedBody syncRequest
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&receivedBody)
+		if err := json.NewDecoder(r.Body).Decode(&receivedBody); err != nil {
+			t.Fatalf("Decode() error: %v", err)
+		}
 		resp := syncResponse{Success: true, Count: len(receivedBody.Activities)}
 		for range receivedBody.Activities {
 			resp.Activities = append(resp.Activities, struct {
 				ID string `json:"id"`
 			}{ID: "test-id"})
 		}
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
 	})
 
 	dbPath := filepath.Join(t.TempDir(), "test.db")
@@ -319,7 +341,11 @@ func TestSyncMetricsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { database.Close() })
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("Close() error: %v", err)
+		}
+	})
 
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
