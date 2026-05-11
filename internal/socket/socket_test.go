@@ -20,7 +20,11 @@ func setupTestSocket(t *testing.T) (*Server, *db.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { database.Close() })
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("Close() error: %v", err)
+		}
+	})
 
 	sockPath := filepath.Join(t.TempDir(), "test.sock")
 	server := NewServer(sockPath, database, "test-machine")
@@ -39,7 +43,11 @@ func dial(t *testing.T, server *Server) net.Conn {
 	if err != nil {
 		t.Fatalf("dial error: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() {
+		if err := conn.Close(); err != nil {
+			t.Fatalf("Close() error: %v", err)
+		}
+	})
 	return conn
 }
 
@@ -54,7 +62,9 @@ func sendAndRecv(t *testing.T, conn net.Conn, req any) Response {
 		t.Fatal(err)
 	}
 
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline() error: %v", err)
+	}
 	scanner := bufio.NewScanner(conn)
 	if !scanner.Scan() {
 		t.Fatal("no response from server")
@@ -175,8 +185,12 @@ func TestInvalidJSON(t *testing.T) {
 	server, _ := setupTestSocket(t)
 	conn := dial(t, server)
 
-	conn.Write([]byte("not json\n"))
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := conn.Write([]byte("not json\n")); err != nil {
+		t.Fatalf("Write() error: %v", err)
+	}
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline() error: %v", err)
+	}
 
 	scanner := bufio.NewScanner(conn)
 	if !scanner.Scan() {

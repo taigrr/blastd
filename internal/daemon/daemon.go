@@ -55,5 +55,7 @@ func (d *Daemon) Stop() {
 	log.Println("stopping daemon...")
 	d.syncer.Stop()
 	d.socket.Stop()
-	d.db.Close()
+	if err := d.db.Close(); err != nil {
+		log.Printf("close database: %v", err)
+	}
 }

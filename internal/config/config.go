@@ -24,7 +24,9 @@ func Load() (*Config, error) {
 	hostname, _ := os.Hostname()
 
 	cm := jety.NewConfigManager().WithEnvPrefix("BLAST_")
-	cm.SetConfigType("toml")
+	if err := cm.SetConfigType("toml"); err != nil {
+		return nil, err
+	}
 
 	cm.SetDefault("server_url", "https://nvimblast.com")
 	cm.SetDefault("auth_token", "")

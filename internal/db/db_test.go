@@ -13,7 +13,11 @@ func setupTestDB(t *testing.T) *DB {
 	if err != nil {
 		t.Fatalf("Open(%q) error: %v", dbPath, err)
 	}
-	t.Cleanup(func() { database.Close() })
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("Close() error: %v", err)
+		}
+	})
 	return database
 }
 

@@ -43,12 +43,16 @@ func Open(path string) (*DB, error) {
 	goose.SetBaseFS(FS)
 
 	if err := goose.SetDialect("sqlite3"); err != nil {
-		conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			return nil, fmt.Errorf("failed to set dialect: %w (close db: %v)", err, closeErr)
+		}
 		return nil, fmt.Errorf("failed to set dialect: %w", err)
 	}
 
 	if err := goose.Up(conn, "migrations"); err != nil {
-		conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			return nil, fmt.Errorf("failed to apply migrations: %w (close db: %v)", err, closeErr)
+		}
 		return nil, fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
@@ -105,7 +109,11 @@ func (db *DB) GetUnsyncedActivities(limit int) ([]*Activity, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			err = closeErr
+		}
+	}()
 
 	var activities []*Activity
 	for rows.Next() {
@@ -153,13 +161,21 @@ func (db *DB) MarkSynced(ids []int64) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && rollbackErr != sql.ErrTxDone {
+			err = rollbackErr
+		}
+	}()
 
 	stmt, err := tx.Prepare("UPDATE activities SET synced = TRUE WHERE id = ?")
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() {
+		if closeErr := stmt.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	for _, id := range ids {
 		if _, err := stmt.Exec(id); err != nil {

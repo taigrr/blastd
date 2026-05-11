@@ -74,7 +74,9 @@ func (s *Server) SetSyncFunc(fn SyncFunc) {
 }
 
 func (s *Server) Start() error {
-	os.Remove(s.path)
+	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
 
 	listener, err := net.Listen("unix", s.path)
 	if err != nil {
@@ -82,7 +84,12 @@ func (s *Server) Start() error {
 	}
 	s.listener = listener
 
-	os.Chmod(s.path, 0600)
+	if err := os.Chmod(s.path, 0o600); err != nil {
+		if closeErr := listener.Close(); closeErr != nil {
+			return fmt.Errorf("chmod socket: %w (close listener: %v)", err, closeErr)
+		}
+		return err
+	}
 
 	go s.accept()
 	return nil
@@ -91,9 +98,13 @@ func (s *Server) Start() error {
 func (s *Server) Stop() {
 	close(s.done)
 	if s.listener != nil {
-		s.listener.Close()
+		if err := s.listener.Close(); err != nil {
+			log.Printf("close listener: %v", err)
+		}
 	}
-	os.Remove(s.path)
+	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+		log.Printf("remove socket: %v", err)
+	}
 }
 
 func (s *Server) accept() {
@@ -118,7 +129,11 @@ func (s *Server) accept() {
 }
 
 func (s *Server) handle(conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Printf("close connection: %v", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(conn)
 	encoder := json.NewEncoder(conn)
@@ -126,7 +141,10 @@ func (s *Server) handle(conn net.Conn) {
 	for scanner.Scan() {
 		var req Request
 		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
-			encoder.Encode(Response{OK: false, Error: "invalid json"})
+			if encodeErr := encoder.Encode(Response{OK: false, Error: "invalid json"}); encodeErr != nil {
+				log.Printf("encode response: %v", encodeErr)
+				return
+			}
 			continue
 		}
 
@@ -138,32 +156,46 @@ func (s *Server) handle(conn net.Conn) {
 		case "status":
 			s.handleStatus(encoder)
 		case "ping":
-			encoder.Encode(Response{OK: true})
+			if err := encoder.Encode(Response{OK: true}); err != nil {
+				log.Printf("encode response: %v", err)
+				return
+			}
 		default:
-			encoder.Encode(Response{OK: false, Error: "unknown request type"})
+			if err := encoder.Encode(Response{OK: false, Error: "unknown request type"}); err != nil {
+				log.Printf("encode response: %v", err)
+				return
+			}
 		}
 	}
 }
 
 func (s *Server) handleSync(encoder *json.Encoder) {
 	if s.syncFunc == nil {
-		encoder.Encode(Response{OK: false, Error: "sync not available"})
+		if err := encoder.Encode(Response{OK: false, Error: "sync not available"}); err != nil {
+			log.Printf("encode response: %v", err)
+		}
 		return
 	}
 
 	if err := s.checkSyncRateLimit(); err != nil {
-		encoder.Encode(Response{OK: false, Error: err.Error()})
+		if encodeErr := encoder.Encode(Response{OK: false, Error: err.Error()}); encodeErr != nil {
+			log.Printf("encode response: %v", encodeErr)
+		}
 		return
 	}
 
 	s.recordSyncRequest()
 
 	if err := s.syncFunc(); err != nil {
-		encoder.Encode(Response{OK: false, Error: err.Error()})
+		if encodeErr := encoder.Encode(Response{OK: false, Error: err.Error()}); encodeErr != nil {
+			log.Printf("encode response: %v", encodeErr)
+		}
 		return
 	}
 
-	encoder.Encode(Response{OK: true, Message: "sync complete"})
+	if err := encoder.Encode(Response{OK: true, Message: "sync complete"}); err != nil {
+		log.Printf("encode response: %v", err)
+	}
 }
 
 func (s *Server) checkSyncRateLimit() error {
@@ -207,19 +239,25 @@ func (s *Server) handleStatus(encoder *json.Encoder) {
 func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {
 	var ad ActivityData
 	if err := json.Unmarshal(data, &ad); err != nil {
-		encoder.Encode(Response{OK: false, Error: "invalid activity data"})
+		if encodeErr := encoder.Encode(Response{OK: false, Error: "invalid activity data"}); encodeErr != nil {
+			log.Printf("encode response: %v", encodeErr)
+		}
 		return
 	}
 
 	startedAt, err := time.Parse(time.RFC3339, ad.StartedAt)
 	if err != nil {
-		encoder.Encode(Response{OK: false, Error: "invalid started_at"})
+		if encodeErr := encoder.Encode(Response{OK: false, Error: "invalid started_at"}); encodeErr != nil {
+			log.Printf("encode response: %v", encodeErr)
+		}
 		return
 	}
 
 	endedAt, err := time.Parse(time.RFC3339, ad.EndedAt)
 	if err != nil {
-		encoder.Encode(Response{OK: false, Error: "invalid ended_at"})
+		if encodeErr := encoder.Encode(Response{OK: false, Error: "invalid ended_at"}); encodeErr != nil {
+			log.Printf("encode response: %v", encodeErr)
+		}
 		return
 	}
 
@@ -245,9 +283,13 @@ func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {
 	}
 
 	if err := s.db.InsertActivity(activity); err != nil {
-		encoder.Encode(Response{OK: false, Error: err.Error()})
+		if encodeErr := encoder.Encode(Response{OK: false, Error: err.Error()}); encodeErr != nil {
+			log.Printf("encode response: %v", encodeErr)
+		}
 		return
 	}
 
-	encoder.Encode(Response{OK: true})
+	if err := encoder.Encode(Response{OK: true}); err != nil {
+		log.Printf("encode response: %v", err)
+	}
 }
