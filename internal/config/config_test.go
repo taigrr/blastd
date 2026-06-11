@@ -144,6 +144,36 @@ func TestLoadNoXDGConfigHome(t *testing.T) {
 	}
 }
 
+func TestLoadCreatesCustomSocketDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, "blastd")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	socketPath := filepath.Join(tmpDir, "runtime", "blastd", "blastd.sock")
+	configContent := "socket_path = \"" + socketPath + "\"\n"
+	configPath := filepath.Join(configDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("HOME", tmpDir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.SocketPath != socketPath {
+		t.Fatalf("SocketPath = %q, want %q", cfg.SocketPath, socketPath)
+	}
+	if _, err := os.Stat(filepath.Dir(socketPath)); err != nil {
+		t.Fatalf("socket dir was not created: %v", err)
+	}
+}
+
 func TestLoadNoHOME(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "")
