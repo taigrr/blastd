@@ -66,9 +66,10 @@ func Load() (*Config, error) {
 		MetricsOnly:         cm.GetBool("metrics_only"),
 	}
 
-	dbDir := filepath.Dir(cfg.DBPath)
-	if err := os.MkdirAll(dbDir, 0o755); err != nil {
-		return nil, err
+	for _, dir := range []string{filepath.Dir(cfg.DBPath), filepath.Dir(cfg.SocketPath)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
 	}
 
 	return cfg, nil
