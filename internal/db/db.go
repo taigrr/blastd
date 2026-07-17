@@ -91,7 +91,7 @@ func (db *DB) InsertActivity(a *Activity) error {
 	return nil
 }
 
-func (db *DB) GetUnsyncedActivities(limit int) ([]*Activity, error) {
+func (db *DB) GetUnsyncedActivities(limit int) (activities []*Activity, err error) {
 	rows, err := db.conn.Query(`
 		SELECT id, client_id,
 			   COALESCE(project, ''), COALESCE(git_remote, ''),
@@ -110,12 +110,11 @@ func (db *DB) GetUnsyncedActivities(limit int) ([]*Activity, error) {
 		return nil, err
 	}
 	defer func() {
-		if closeErr := rows.Close(); closeErr != nil {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
 	}()
 
-	var activities []*Activity
 	for rows.Next() {
 		a := &Activity{}
 		err := rows.Scan(
@@ -152,7 +151,7 @@ func (db *DB) GetStats() (*Stats, error) {
 	return &s, nil
 }
 
-func (db *DB) MarkSynced(ids []int64) error {
+func (db *DB) MarkSynced(ids []int64) (err error) {
 	if len(ids) == 0 {
 		return nil
 	}
