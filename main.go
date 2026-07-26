@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -77,12 +78,12 @@ func main() {
 func run(cmd *cobra.Command, _ []string) error {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	d, err := daemon.New(cfg)
 	if err != nil {
-		log.Fatalf("failed to create daemon: %v", err)
+		return fmt.Errorf("failed to create daemon: %w", err)
 	}
 
 	sigCh := make(chan os.Signal, 1)
@@ -94,8 +95,13 @@ func run(cmd *cobra.Command, _ []string) error {
 		d.Stop()
 	}()
 
-	if err := d.Run(); err != nil {
-		log.Fatalf("daemon error: %v", err)
+	runErr := d.Run()
+	// Ensure cleanup runs and completes before we return, regardless of how
+	// Run exited. Stop is idempotent, so this is safe alongside the signal
+	// handler.
+	d.Stop()
+	if runErr != nil {
+		return fmt.Errorf("daemon error: %w", runErr)
 	}
 
 	return nil

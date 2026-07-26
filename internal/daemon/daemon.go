@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"log"
+	gosync "sync"
 
 	"github.com/taigrr/blastd/internal/config"
 	"github.com/taigrr/blastd/internal/db"
@@ -10,10 +11,11 @@ import (
 )
 
 type Daemon struct {
-	cfg    *config.Config
-	db     *db.DB
-	socket *socket.Server
-	syncer *sync.Syncer
+	cfg      *config.Config
+	db       *db.DB
+	socket   *socket.Server
+	syncer   *sync.Syncer
+	stopOnce gosync.Once
 }
 
 func New(cfg *config.Config) (*Daemon, error) {
@@ -51,11 +53,16 @@ func (d *Daemon) Run() error {
 	return nil
 }
 
+// Stop shuts the daemon down in order (syncer flush, socket handlers, DB) and
+// is safe to call multiple times; concurrent callers block until the first
+// completes.
 func (d *Daemon) Stop() {
-	log.Println("stopping daemon...")
-	d.syncer.Stop()
-	d.socket.Stop()
-	if err := d.db.Close(); err != nil {
-		log.Printf("close database: %v", err)
-	}
+	d.stopOnce.Do(func() {
+		log.Println("stopping daemon...")
+		d.syncer.Stop()
+		d.socket.Stop()
+		if err := d.db.Close(); err != nil {
+			log.Printf("close database: %v", err)
+		}
+	})
 }

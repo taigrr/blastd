@@ -104,6 +104,39 @@ func TestSyncBatchEmpty(t *testing.T) {
 	}
 }
 
+func TestSyncBatchDedupCount(t *testing.T) {
+	// Server reports Count < len (activities it already had, deduplicated by
+	// clientUUID). The whole batch must still be marked synced, not retried.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req syncRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Decode() error: %v", err)
+		}
+		if err := json.NewEncoder(w).Encode(syncResponse{Success: true, Count: len(req.Activities) - 1}); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
+	})
+
+	syncer, database := setupTestSyncer(t, handler)
+	insertActivities(t, database, 4)
+
+	n, err := syncer.syncBatch()
+	if err != nil {
+		t.Fatalf("syncBatch() error: %v", err)
+	}
+	if n != 4 {
+		t.Errorf("synced %d, want 4", n)
+	}
+
+	remaining, err := database.GetUnsyncedActivities(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 0 {
+		t.Errorf("%d unsynced remaining, want 0 (dedup count must not block marking synced)", len(remaining))
+	}
+}
+
 func TestSyncBatchServerError(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

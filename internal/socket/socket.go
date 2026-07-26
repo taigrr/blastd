@@ -3,6 +3,7 @@ package socket
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/taigrr/blastd/internal/db"
+	syncpkg "github.com/taigrr/blastd/internal/sync"
 )
 
 type Request struct {
@@ -43,6 +45,11 @@ type ActivityData struct {
 
 type SyncFunc func() error
 
+type syncRecord struct {
+	id int64
+	at time.Time
+}
+
 type Server struct {
 	path     string
 	db       *db.DB
@@ -50,14 +57,24 @@ type Server struct {
 	syncFunc SyncFunc
 	listener net.Listener
 	done     chan struct{}
+	stopOnce sync.Once
 
 	rateMu       sync.Mutex
-	syncRequests []time.Time
+	syncRequests []syncRecord
+	syncSeq      int64
+
+	// connMu guards the set of live connections and the handler WaitGroup so
+	// Stop can unblock and wait for in-flight handlers before the DB closes.
+	connMu   sync.Mutex
+	conns    map[net.Conn]struct{}
+	handlers sync.WaitGroup
 }
 
 const (
-	syncRateLimit  = 10
-	syncRateWindow = 10 * time.Minute
+	syncRateLimit   = 10
+	syncRateWindow  = 10 * time.Minute
+	maxRequestBytes = 1 << 20 // 1 MiB per request line
+	shutdownGrace   = 5 * time.Second
 )
 
 func NewServer(path string, database *db.DB, machine string) *Server {
@@ -66,6 +83,7 @@ func NewServer(path string, database *db.DB, machine string) *Server {
 		db:      database,
 		machine: machine,
 		done:    make(chan struct{}),
+		conns:   make(map[net.Conn]struct{}),
 	}
 }
 
@@ -96,12 +114,37 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Stop() {
-	close(s.done)
+	s.stopOnce.Do(func() {
+		close(s.done)
+	})
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
 			log.Printf("close listener: %v", err)
 		}
 	}
+
+	// Unblock any handlers parked in scanner.Scan by setting a past read
+	// deadline, then wait (bounded) for them to finish so the DB isn't closed
+	// out from under an in-flight InsertActivity/SyncNow.
+	s.connMu.Lock()
+	for c := range s.conns {
+		if err := c.SetReadDeadline(time.Now()); err != nil {
+			log.Printf("set read deadline: %v", err)
+		}
+	}
+	s.connMu.Unlock()
+
+	waited := make(chan struct{})
+	go func() {
+		s.handlers.Wait()
+		close(waited)
+	}()
+	select {
+	case <-waited:
+	case <-time.After(shutdownGrace):
+		log.Printf("socket: timed out waiting for connection handlers")
+	}
+
 	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
 		log.Printf("remove socket: %v", err)
 	}
@@ -123,19 +166,45 @@ func (s *Server) accept() {
 					continue
 				}
 			}
+
+			// Register the connection and increment the handler WaitGroup
+			// under connMu, gated on done, so Stop's sweep+Wait always
+			// observes every live handler and no Add can race a completed
+			// Wait. If Stop already fired, drop the connection.
+			s.connMu.Lock()
+			select {
+			case <-s.done:
+				s.connMu.Unlock()
+				if err := conn.Close(); err != nil {
+					log.Printf("close connection: %v", err)
+				}
+				return
+			default:
+			}
+			s.conns[conn] = struct{}{}
+			s.handlers.Add(1)
+			s.connMu.Unlock()
+
 			go s.handle(conn)
 		}
 	}
 }
 
 func (s *Server) handle(conn net.Conn) {
+	defer s.handlers.Done()
 	defer func() {
 		if err := conn.Close(); err != nil {
 			log.Printf("close connection: %v", err)
 		}
 	}()
+	defer func() {
+		s.connMu.Lock()
+		delete(s.conns, conn)
+		s.connMu.Unlock()
+	}()
 
 	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxRequestBytes)
 	encoder := json.NewEncoder(conn)
 
 	for scanner.Scan() {
@@ -167,6 +236,18 @@ func (s *Server) handle(conn net.Conn) {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		// A read deadline set by Stop unblocks Scan with a timeout error on
+		// clean shutdown; don't misreport that as a client error.
+		select {
+		case <-s.done:
+		default:
+			if encodeErr := encoder.Encode(Response{OK: false, Error: "read error: " + err.Error()}); encodeErr != nil {
+				log.Printf("encode response: %v", encodeErr)
+			}
+			log.Printf("connection read error: %v", err)
+		}
+	}
 }
 
 func (s *Server) handleSync(encoder *json.Encoder) {
@@ -177,16 +258,18 @@ func (s *Server) handleSync(encoder *json.Encoder) {
 		return
 	}
 
-	if err := s.checkSyncRateLimit(); err != nil {
+	if token, err := s.reserveSyncSlot(); err != nil {
 		if encodeErr := encoder.Encode(Response{OK: false, Error: err.Error()}); encodeErr != nil {
 			log.Printf("encode response: %v", encodeErr)
 		}
 		return
-	}
-
-	s.recordSyncRequest()
-
-	if err := s.syncFunc(); err != nil {
+	} else if err := s.syncFunc(); err != nil {
+		// Only return the reserved slot for the in-progress no-op, which issued
+		// no request. Real attempts (including failures against a down server)
+		// keep their slot so the rate limit still bounds outbound load.
+		if errors.Is(err, syncpkg.ErrSyncInProgress) {
+			s.releaseSyncSlot(token)
+		}
 		if encodeErr := encoder.Encode(Response{OK: false, Error: err.Error()}); encodeErr != nil {
 			log.Printf("encode response: %v", encodeErr)
 		}
@@ -198,42 +281,59 @@ func (s *Server) handleSync(encoder *json.Encoder) {
 	}
 }
 
-func (s *Server) checkSyncRateLimit() error {
+// reserveSyncSlot checks the rate limit and records the request atomically
+// under a single lock hold to avoid a check-then-record race. It returns a
+// token identifying the reserved slot for use with releaseSyncSlot.
+func (s *Server) reserveSyncSlot() (int64, error) {
 	s.rateMu.Lock()
 	defer s.rateMu.Unlock()
 
 	cutoff := time.Now().Add(-syncRateWindow)
 	recent := s.syncRequests[:0]
-	for _, t := range s.syncRequests {
-		if t.After(cutoff) {
-			recent = append(recent, t)
+	for _, r := range s.syncRequests {
+		if r.at.After(cutoff) {
+			recent = append(recent, r)
 		}
 	}
 	s.syncRequests = recent
 
 	if len(s.syncRequests) >= syncRateLimit {
-		oldest := s.syncRequests[0]
+		oldest := s.syncRequests[0].at
 		waitUntil := oldest.Add(syncRateWindow)
 		remaining := time.Until(waitUntil).Round(time.Second)
-		return fmt.Errorf("rate limited: try again in %s", remaining)
+		return 0, fmt.Errorf("rate limited: try again in %s", remaining)
 	}
 
-	return nil
+	s.syncSeq++
+	token := s.syncSeq
+	s.syncRequests = append(s.syncRequests, syncRecord{id: token, at: time.Now()})
+	return token, nil
 }
 
-func (s *Server) recordSyncRequest() {
+// releaseSyncSlot removes the reservation with the given token, used when a
+// reserved sync ultimately did no useful work.
+func (s *Server) releaseSyncSlot(token int64) {
 	s.rateMu.Lock()
 	defer s.rateMu.Unlock()
-	s.syncRequests = append(s.syncRequests, time.Now())
+	for i, r := range s.syncRequests {
+		if r.id == token {
+			s.syncRequests = append(s.syncRequests[:i], s.syncRequests[i+1:]...)
+			return
+		}
+	}
 }
 
 func (s *Server) handleStatus(encoder *json.Encoder) {
 	stats, err := s.db.GetStats()
 	if err != nil {
-		encoder.Encode(Response{OK: false, Error: err.Error()})
+		if encodeErr := encoder.Encode(Response{OK: false, Error: err.Error()}); encodeErr != nil {
+			log.Printf("encode response: %v", encodeErr)
+		}
 		return
 	}
-	encoder.Encode(Response{OK: true, Total: &stats.Total, Unsynced: &stats.Unsynced})
+	if err := encoder.Encode(Response{OK: true, Total: &stats.Total, Unsynced: &stats.Unsynced}); err != nil {
+		log.Printf("encode response: %v", err)
+	}
 }
 
 func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {
