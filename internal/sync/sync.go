@@ -126,7 +126,7 @@ func (s *Syncer) drainBacklog() {
 	}
 }
 
-func (s *Syncer) syncBatch() (int, error) {
+func (s *Syncer) syncBatch() (synced int, err error) {
 	activities, err := s.db.GetUnsyncedActivities(s.batchSize)
 	if err != nil {
 		return 0, fmt.Errorf("get unsynced activities: %w", err)
