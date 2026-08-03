@@ -92,6 +92,29 @@ func TestSyncBatchSuccess(t *testing.T) {
 	}
 }
 
+func TestSyncBatchTrimsTrailingServerURLSlash(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/activities" {
+			t.Fatalf("request path = %q, want %q", r.URL.Path, "/api/activities")
+		}
+		if err := json.NewEncoder(w).Encode(syncResponse{Success: true, Count: 1}); err != nil {
+			t.Fatalf("Encode() error: %v", err)
+		}
+	})
+
+	syncer, database := setupTestSyncer(t, handler)
+	syncer.serverURL += "/"
+	insertActivities(t, database, 1)
+
+	n, err := syncer.syncBatch()
+	if err != nil {
+		t.Fatalf("syncBatch() error: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("synced %d, want 1", n)
+	}
+}
+
 func TestSyncBatchEmpty(t *testing.T) {
 	syncer, _ := setupTestSyncer(t, okHandler(t))
 

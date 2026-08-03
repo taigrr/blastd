@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -260,7 +261,7 @@ func (s *Syncer) syncBatch() (synced int, err error) {
 		return 0, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", s.serverURL+"/api/activities", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", s.activitiesURL(), bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("create request: %w", err)
 	}
@@ -302,6 +303,10 @@ func (s *Syncer) syncBatch() (synced int, err error) {
 
 	log.Printf("sync: successfully synced %d activities", len(activities))
 	return len(activities), nil
+}
+
+func (s *Syncer) activitiesURL() string {
+	return strings.TrimRight(s.serverURL, "/") + "/api/activities"
 }
 
 func (s *Syncer) increaseBackoff() {
