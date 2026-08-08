@@ -1,5 +1,9 @@
 # blastd
 
+[![CI](https://github.com/taigrr/blastd/actions/workflows/ci.yml/badge.svg)](https://github.com/taigrr/blastd/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/taigrr/blastd.svg)](https://pkg.go.dev/github.com/taigrr/blastd)
+[![Go Report Card](https://goreportcard.com/badge/github.com/taigrr/blastd)](https://goreportcard.com/report/github.com/taigrr/blastd)
+
 Local daemon for [Blast](https://nvimblast.com) activity tracking. Caches activity data in SQLite and syncs to the Blast server every 10 minutes (with exponential backoff on failures).
 
 ## Installation
@@ -134,3 +138,7 @@ Trigger an immediate sync (rate-limited to 10 requests per 10-minute window):
 ## Related Projects
 
 - [blast.nvim](https://github.com/taigrr/blast.nvim) - Neovim plugin (FOSS)
+
+## License
+
+Released under the [0BSD](LICENSE) license.

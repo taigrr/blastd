@@ -73,7 +73,7 @@ nfpms:
     homepage: https://github.com/taigrr/blastd
     maintainer: Tai Groot <groot.tai@gmail.com>
     description: Local daemon for Blast activity tracking
-    license: MIT
+    license: 0BSD
     formats:
       - deb
       - rpm
