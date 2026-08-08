@@ -3,10 +3,36 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
+// clearBlastEnv unsets any BLAST_-prefixed environment variables so config
+// loading is hermetic and not influenced by the developer's real environment
+// (e.g. a real BLAST_AUTH_TOKEN). Original values are restored on cleanup.
+func clearBlastEnv(t *testing.T) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		key, _, found := strings.Cut(kv, "=")
+		if !found || !strings.HasPrefix(key, "BLAST_") {
+			continue
+		}
+		old, ok := os.LookupEnv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("Unsetenv(%q) error: %v", key, err)
+		}
+		if ok {
+			t.Cleanup(func() {
+				if err := os.Setenv(key, old); err != nil {
+					t.Errorf("restore Setenv(%q) error: %v", key, err)
+				}
+			})
+		}
+	}
+}
+
 func TestLoadDefaults(t *testing.T) {
+	clearBlastEnv(t)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
@@ -37,6 +63,7 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadFromFile(t *testing.T) {
+	clearBlastEnv(t)
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, "blastd")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -81,6 +108,7 @@ machine = "test-machine"
 }
 
 func TestLoadEnvVarOverride(t *testing.T) {
+	clearBlastEnv(t)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
@@ -102,6 +130,7 @@ func TestLoadEnvVarOverride(t *testing.T) {
 }
 
 func TestLoadEnvOverridesFile(t *testing.T) {
+	clearBlastEnv(t)
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, "blastd")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -130,6 +159,7 @@ func TestLoadEnvOverridesFile(t *testing.T) {
 }
 
 func TestLoadNoXDGConfigHome(t *testing.T) {
+	clearBlastEnv(t)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
@@ -145,6 +175,7 @@ func TestLoadNoXDGConfigHome(t *testing.T) {
 }
 
 func TestLoadCreatesCustomSocketDir(t *testing.T) {
+	clearBlastEnv(t)
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, "blastd")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -175,6 +206,7 @@ func TestLoadCreatesCustomSocketDir(t *testing.T) {
 }
 
 func TestLoadNoHOME(t *testing.T) {
+	clearBlastEnv(t)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "")
 
