@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/pressly/goose/v3 v3.27.3
 	github.com/spf13/cobra v1.10.2
-	github.com/taigrr/jety v0.4.2
+	github.com/taigrr/jety v0.4.3
 	modernc.org/sqlite v1.56.0
 )
 
