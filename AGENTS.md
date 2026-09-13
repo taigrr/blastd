@@ -21,7 +21,7 @@ go run .                 # Run the daemon locally
 go install .             # Install to $GOPATH/bin
 ```
 
-No Makefile, no CI pipeline, no linter config. Use `goimports` for formatting and `staticcheck` if available.
+No Makefile or linter config. CI runs formatting, goimports, go vet, staticcheck, go mod tidy, govulncheck, build, and race tests.
 
 ## Code Organization
 
@@ -121,7 +121,7 @@ Config file: `$XDG_CONFIG_HOME/blastd/config.toml` or `~/.config/blastd/config.t
 | `machine`               | `BLAST_MACHINE`                  | OS hostname                         | Machine identifier sent with each activity                            |
 | `metrics_only`          | `BLAST_METRICS_ONLY`             | `false`                             | Replace all project/remote with "private" at sync time                |
 
-All config fields can be set via environment variables with the `BLAST_` prefix. Config file values take precedence over env vars, which take precedence over defaults.
+All config fields can be set via environment variables with the `BLAST_` prefix. Environment variables take precedence over config file values, which take precedence over defaults.
 
 ## Code Patterns & Conventions
 
@@ -136,7 +136,7 @@ All config fields can be set via environment variables with the `BLAST_` prefix.
 
 ### Error Handling
 
-- `main.go` uses `log.Fatalf` for startup failures
+- `main.go` returns startup failures through `fang.Execute` and exits non-zero from `main`
 - Internal packages return errors to callers (no panics)
 - `sync.go` retries with exponential backoff (30s min, 30min max) on HTTP or server errors; backoff resets on success
 - Socket handler sends JSON error responses to clients, never crashes on bad input
