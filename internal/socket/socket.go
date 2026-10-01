@@ -360,6 +360,12 @@ func (s *Server) handleActivity(data json.RawMessage, encoder *json.Encoder) {
 		}
 		return
 	}
+	if endedAt.Before(startedAt) {
+		if encodeErr := encoder.Encode(Response{OK: false, Error: "ended_at before started_at"}); encodeErr != nil {
+			log.Printf("encode response: %v", encodeErr)
+		}
+		return
+	}
 
 	editor := ad.Editor
 	if editor == "" {
