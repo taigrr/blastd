@@ -28,7 +28,16 @@ func setupTestSocket(t *testing.T) (*Server, *db.DB) {
 		}
 	})
 
-	sockPath := filepath.Join(t.TempDir(), "test.sock")
+	sockDir, err := os.MkdirTemp("", "blastd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(sockDir); err != nil {
+			t.Errorf("RemoveAll() error: %v", err)
+		}
+	})
+	sockPath := filepath.Join(sockDir, "test.sock")
 	server := NewServer(sockPath, database, "test-machine")
 
 	if err := server.Start(); err != nil {

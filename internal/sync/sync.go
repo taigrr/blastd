@@ -78,6 +78,7 @@ type syncResponse struct {
 const (
 	httpTimeout           = 30 * time.Second
 	shutdownDrainDeadline = 15 * time.Second
+	privateValue          = "private"
 )
 
 func NewSyncer(database *db.DB, serverURL, apiToken string, intervalMinutes, batchSize int, metricsOnly bool) *Syncer {
@@ -235,8 +236,8 @@ func (s *Syncer) syncBatch() (synced int, err error) {
 		filename := a.Filename
 		gitBranch := a.GitBranch
 		if s.metricsOnly {
-			project = "private"
-			gitRemote = "private"
+			project = privateValue
+			gitRemote = privateValue
 			filename = ""
 			gitBranch = ""
 		}
@@ -263,7 +264,7 @@ func (s *Syncer) syncBatch() (synced int, err error) {
 		return 0, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", s.activitiesURL(), bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, s.activitiesURL(), bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("create request: %w", err)
 	}
