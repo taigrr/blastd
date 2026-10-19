@@ -92,7 +92,14 @@ func (s *Server) SetSyncFunc(fn SyncFunc) {
 }
 
 func (s *Server) Start() error {
-	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+	if info, err := os.Lstat(s.path); err == nil {
+		if info.Mode()&os.ModeSocket == 0 {
+			return fmt.Errorf("socket path exists and is not a socket: %s", s.path)
+		}
+		if err := os.Remove(s.path); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
 		return err
 	}
 
