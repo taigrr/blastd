@@ -32,7 +32,7 @@ sync_interval_minutes = 10
 # Machine identifier (default: hostname)
 machine = "macbook-pro"
 
-# Metrics-only mode — sends "private" for project name and git remote
+# Metrics-only mode — sends "private" for project name/remote and omits paths/branches
 # Useful if you want time/filetype/APM stats without revealing what you work on
 # metrics_only = true
 ```
@@ -82,7 +82,7 @@ The editor plugin (e.g. blast.nvim) walks up from the current file to the git ro
 
 ### Global: metrics-only mode
 
-Set `metrics_only = true` in `config.toml` or `BLAST_METRICS_ONLY=true` in your environment. This replaces **all** project names and git remotes with `"private"` at sync time, regardless of per-project `.blast.toml` settings. Useful if you want to track your coding habits without revealing any project information.
+Set `metrics_only = true` in `config.toml` or `BLAST_METRICS_ONLY=true` in your environment. This replaces **all** project names and git remotes with `"private"` and omits filenames and git branches at sync time, regardless of per-project `.blast.toml` settings. Useful if you want to track your coding habits without revealing any project information.
 
 ## Socket Protocol
 
