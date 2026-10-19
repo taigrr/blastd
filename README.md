@@ -50,7 +50,7 @@ All config fields can also be set via environment variables with the `BLAST_` pr
 | `machine`               | `BLAST_MACHINE`               | OS hostname                         |
 | `metrics_only`          | `BLAST_METRICS_ONLY`          | `false`                             |
 
-Config file values take precedence over env vars, which take precedence over defaults.
+Environment variables take precedence over config file values, which take precedence over defaults.
 
 ## Usage
 
