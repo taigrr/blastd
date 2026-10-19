@@ -168,6 +168,37 @@ func TestActivityWithEditor(t *testing.T) {
 	}
 }
 
+func TestActivityRejectsEndedBeforeStarted(t *testing.T) {
+	server, database := setupTestSocket(t)
+	conn := dial(t, server)
+
+	now := time.Now().UTC()
+	req := map[string]any{
+		"type": "activity",
+		"data": map[string]any{
+			"project":    "blast",
+			"started_at": now.Format(time.RFC3339),
+			"ended_at":   now.Add(-5 * time.Minute).Format(time.RFC3339),
+		},
+	}
+
+	resp := sendAndRecv(t, conn, req)
+	if resp.OK {
+		t.Fatal("expected OK = false for ended_at before started_at")
+	}
+	if resp.Error != "ended_at before started_at" {
+		t.Errorf("Error = %q, want %q", resp.Error, "ended_at before started_at")
+	}
+
+	activities, err := database.GetUnsyncedActivities(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(activities) != 0 {
+		t.Fatalf("got %d activities, want 0", len(activities))
+	}
+}
+
 func TestUnknownRequestType(t *testing.T) {
 	server, _ := setupTestSocket(t)
 	conn := dial(t, server)
