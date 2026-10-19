@@ -174,7 +174,12 @@ func TestStartReplacesStaleSocket(t *testing.T) {
 	if err := server.Start(); err != nil {
 		t.Fatalf("Start() with stale socket error: %v", err)
 	}
-	server.Stop()
+	t.Cleanup(server.Stop)
+
+	conn := dial(t, server)
+	if resp := sendAndRecv(t, conn, map[string]any{"type": "ping"}); !resp.OK {
+		t.Fatal("replacement server should respond to ping")
+	}
 }
 
 func TestActivityInsertion(t *testing.T) {

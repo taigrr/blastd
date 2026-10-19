@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/taigrr/blastd/internal/db"
@@ -98,11 +99,15 @@ func (s *Server) Start() error {
 		if info.Mode()&os.ModeSocket == 0 {
 			return fmt.Errorf("socket path exists and is not a socket: %s", s.path)
 		}
-		if conn, dialErr := net.DialTimeout("unix", s.path, staleSocketDialTimeout); dialErr == nil {
+		conn, dialErr := net.DialTimeout("unix", s.path, staleSocketDialTimeout)
+		if dialErr == nil {
 			_ = conn.Close()
 			return fmt.Errorf("another blastd is already listening on %s", s.path)
 		}
-		if err := os.Remove(s.path); err != nil {
+		if !errors.Is(dialErr, syscall.ECONNREFUSED) && !errors.Is(dialErr, syscall.ENOENT) {
+			return fmt.Errorf("probe socket %s: %w", s.path, dialErr)
+		}
+		if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	} else if !os.IsNotExist(err) {
