@@ -42,7 +42,9 @@ func insertActivities(t *testing.T, database *db.DB, n int) {
 			GitRemote: "git@github.com:taigrr/blast.git",
 			StartedAt: now.Add(time.Duration(i) * time.Minute),
 			EndedAt:   now.Add(time.Duration(i+1) * time.Minute),
+			Filename:  "internal/sync/sync.go",
 			Filetype:  "go",
+			GitBranch: "cd/secret-client-work",
 			Editor:    "neovim",
 			Machine:   "test",
 		}
@@ -424,6 +426,12 @@ func TestSyncMetricsOnly(t *testing.T) {
 	}
 	if a.GitRemote != "private" {
 		t.Errorf("GitRemote = %q, want %q", a.GitRemote, "private")
+	}
+	if a.Filename != "" {
+		t.Errorf("Filename = %q, want empty in metrics-only mode", a.Filename)
+	}
+	if a.GitBranch != "" {
+		t.Errorf("GitBranch = %q, want empty in metrics-only mode", a.GitBranch)
 	}
 	if a.Editor != "neovim" {
 		t.Errorf("Editor = %q, want %q (should still be sent)", a.Editor, "neovim")

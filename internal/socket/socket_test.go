@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,6 +86,41 @@ func TestPing(t *testing.T) {
 	resp := sendAndRecv(t, conn, Request{Type: "ping"})
 	if !resp.OK {
 		t.Errorf("ping: OK = false, error = %q", resp.Error)
+	}
+}
+
+func TestStartRefusesNonSocketPath(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Fatalf("Close() error: %v", err)
+		}
+	})
+
+	sockPath := filepath.Join(t.TempDir(), "blastd.sock")
+	if err := os.WriteFile(sockPath, []byte("do not remove"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(sockPath, database, "test-machine")
+	err = server.Start()
+	if err == nil {
+		t.Fatal("Start() should fail when socket path is a regular file")
+	}
+	if !strings.Contains(err.Error(), "not a socket") {
+		t.Fatalf("Start() error = %q, want not-a-socket error", err)
+	}
+
+	contents, err := os.ReadFile(sockPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error: %v", err)
+	}
+	if string(contents) != "do not remove" {
+		t.Fatalf("socket path contents = %q, want original file preserved", contents)
 	}
 }
 

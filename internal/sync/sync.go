@@ -233,10 +233,12 @@ func (s *Syncer) syncBatch() (synced int, err error) {
 		project := a.Project
 		gitRemote := a.GitRemote
 		filename := a.Filename
+		gitBranch := a.GitBranch
 		if s.metricsOnly {
 			project = "private"
 			gitRemote = "private"
 			filename = ""
+			gitBranch = ""
 		}
 		payloads[i] = activityPayload{
 			ClientUUID:       a.ClientID,
@@ -248,7 +250,7 @@ func (s *Syncer) syncBatch() (synced int, err error) {
 			Filetype:         a.Filetype,
 			LinesAdded:       a.LinesAdded,
 			LinesRemoved:     a.LinesRemoved,
-			GitBranch:        a.GitBranch,
+			GitBranch:        gitBranch,
 			ActionsPerMinute: a.ActionsPerMinute,
 			WordsPerMinute:   a.WordsPerMinute,
 			Editor:           a.Editor,
