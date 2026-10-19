@@ -133,6 +133,50 @@ func TestStartRefusesNonSocketPath(t *testing.T) {
 	}
 }
 
+func TestStartRefusesLiveSocket(t *testing.T) {
+	server, database := setupTestSocket(t)
+
+	second := NewServer(server.path, database, "test-machine")
+	err := second.Start()
+	if err == nil {
+		t.Fatal("Start() should fail when another server is listening")
+	}
+	if !strings.Contains(err.Error(), "already listening") {
+		t.Fatalf("Start() error = %q, want already-listening error", err)
+	}
+
+	conn := dial(t, server)
+	if resp := sendAndRecv(t, conn, map[string]any{"type": "ping"}); !resp.OK {
+		t.Fatal("original server should still respond after refused takeover")
+	}
+}
+
+func TestStartReplacesStaleSocket(t *testing.T) {
+	_, database := setupTestSocket(t)
+
+	sockDir, err := os.MkdirTemp("", "blastd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	sockPath := filepath.Join(sockDir, "stale.sock")
+
+	listener, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener.(*net.UnixListener).SetUnlinkOnClose(false)
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	server := NewServer(sockPath, database, "test-machine")
+	if err := server.Start(); err != nil {
+		t.Fatalf("Start() with stale socket error: %v", err)
+	}
+	server.Stop()
+}
+
 func TestActivityInsertion(t *testing.T) {
 	server, database := setupTestSocket(t)
 	conn := dial(t, server)

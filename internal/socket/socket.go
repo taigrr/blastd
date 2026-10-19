@@ -75,6 +75,8 @@ const (
 	syncRateWindow  = 10 * time.Minute
 	maxRequestBytes = 1 << 20 // 1 MiB per request line
 	shutdownGrace   = 5 * time.Second
+
+	staleSocketDialTimeout = 500 * time.Millisecond
 )
 
 func NewServer(path string, database *db.DB, machine string) *Server {
@@ -95,6 +97,10 @@ func (s *Server) Start() error {
 	if info, err := os.Lstat(s.path); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
 			return fmt.Errorf("socket path exists and is not a socket: %s", s.path)
+		}
+		if conn, dialErr := net.DialTimeout("unix", s.path, staleSocketDialTimeout); dialErr == nil {
+			_ = conn.Close()
+			return fmt.Errorf("another blastd is already listening on %s", s.path)
 		}
 		if err := os.Remove(s.path); err != nil {
 			return err
