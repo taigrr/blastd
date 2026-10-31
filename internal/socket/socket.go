@@ -163,9 +163,8 @@ func (s *Server) Stop() {
 		log.Printf("socket: timed out waiting for connection handlers")
 	}
 
-	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
-		log.Printf("remove socket: %v", err)
-	}
+	// The Unix listener removes its own socket on Close. Do not unlink the
+	// path here: startup may have failed, or a replacement may now own it.
 }
 
 func (s *Server) accept() {
