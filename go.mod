@@ -2,6 +2,8 @@ module github.com/taigrr/blastd
 
 go 1.27.2
 
+toolchain go1.27.3
+
 require (
 	github.com/charmbracelet/fang v1.0.0
 	github.com/google/uuid v1.6.0
