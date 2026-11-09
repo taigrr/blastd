@@ -440,3 +440,32 @@ func TestSyncRateLimit(t *testing.T) {
 		t.Errorf("expected descriptive rate limit error, got %q", resp.Error)
 	}
 }
+
+// A failed startup must not let cleanup unlink another daemon's socket.
+func TestStopAfterFailedStartPreservesListener(t *testing.T) {
+	server, database := setupTestSocket(t)
+	other := NewServer(server.path, database, "other-machine")
+	if err := other.Start(); err == nil {
+		t.Fatal("second server unexpectedly started")
+	}
+	other.Stop()
+	conn := dial(t, server)
+	if resp := sendAndRecv(t, conn, Request{Type: "ping"}); !resp.OK {
+		t.Fatalf("original server ping failed: %s", resp.Error)
+	}
+}
+
+func TestRepeatedStopPreservesReplacementListener(t *testing.T) {
+	server, database := setupTestSocket(t)
+	server.Stop()
+	replacement := NewServer(server.path, database, "replacement-machine")
+	if err := replacement.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(replacement.Stop)
+	server.Stop()
+	conn := dial(t, replacement)
+	if resp := sendAndRecv(t, conn, Request{Type: "ping"}); !resp.OK {
+		t.Fatalf("replacement server ping failed: %s", resp.Error)
+	}
+}
