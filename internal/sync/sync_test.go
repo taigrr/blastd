@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -438,5 +439,78 @@ func TestSyncMetricsOnly(t *testing.T) {
 	}
 	if a.Filetype != "go" {
 		t.Errorf("Filetype = %q, want %q (should still be sent)", a.Filetype, "go")
+	}
+}
+
+// A failed acknowledgement must leave the exact same client UUIDs available
+// for retry: the server may already have committed them before the reply failed.
+func TestSyncBatchInvalidAcknowledgementRetry(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{"empty", ""},
+		{"truncated", `{"success":true`},
+		{"invalid JSON", `<html>upstream error</html>`},
+		{"null", `null`},
+		{"missing success", `{}`},
+		{"wrong success type", `{"success":"true"}`},
+		{"array", `[]`},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			var requests atomic.Int32
+			payloads := make(chan []activityPayload, 2)
+			syncer, database := setupTestSyncer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request syncRequest
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Errorf("decode request: %v", err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				payloads <- request.Activities
+				body := test.body
+				if requests.Add(1) > 1 {
+					// A zero insertion count is valid when the server deduplicates a retry.
+					body = `{"success":true,"count":0}`
+				}
+				if _, err := w.Write([]byte(body)); err != nil {
+					t.Errorf("write response: %v", err)
+				}
+			}))
+			insertActivities(t, database, 2)
+			original, err := database.GetUnsyncedActivities(10)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if count, err := syncer.syncBatch(); err == nil || count != 0 {
+				t.Fatalf("invalid acknowledgement: count=%d error=%v; want 0 and error", count, err)
+			}
+			remaining, err := database.GetUnsyncedActivities(10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(remaining, original) {
+				t.Fatal("failed acknowledgement changed queued activities")
+			}
+
+			if count, err := syncer.syncBatch(); err != nil || count != len(original) {
+				t.Fatalf("retry: count=%d error=%v; want %d and nil", count, err, len(original))
+			}
+			first, retry := <-payloads, <-payloads
+			if !reflect.DeepEqual(first, retry) {
+				t.Fatal("retry changed payload or client UUIDs")
+			}
+			for index, activity := range first {
+				if activity.ClientUUID == "" || activity.ClientUUID != original[index].ClientID {
+					t.Fatalf("activity %d: client UUID=%q, want %q", index, activity.ClientUUID, original[index].ClientID)
+				}
+			}
+			remaining, err = database.GetUnsyncedActivities(10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(remaining) != 0 {
+				t.Fatalf("%d activities remain after successful retry", len(remaining))
+			}
+		})
 	}
 }
